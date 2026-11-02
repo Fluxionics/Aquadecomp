@@ -15,9 +15,9 @@ public final class BaksmaliDecompiler implements DecompilerStrategy {
     @Override
     public boolean isAvailable() {
         try {
-            Runtime.getRuntime().exec(new String[]{"baksmali", "--version"});
+            Class.forName("org.jf.baksmali.Baksmali");
             return true;
-        } catch (Exception e) {
+        } catch (ClassNotFoundException e) {
             return false;
         }
     }
@@ -31,28 +31,28 @@ public final class BaksmaliDecompiler implements DecompilerStrategy {
 
         Files.createDirectories(outputDir);
         Path smaliDir = outputDir.resolve("smali");
-        Path resDir = outputDir.resolve("resources");
         Files.createDirectories(smaliDir);
 
         try {
-            ProcessBuilder pb = new ProcessBuilder("baksmali", "d", "-o", smaliDir.toString(), apk.toString());
-            pb.directory(outputDir.toFile());
-            Process proc = pb.start();
-            int exit = proc.waitFor();
+            Class<?> baksmaliClass = Class.forName("org.jf.baksmali.Baksmali");
+            java.lang.reflect.Method disassembleMethod = baksmaliClass.getMethod(
+                    "disassemble", java.io.File.class, java.io.File.class
+            );
 
-            if (exit != 0) {
-                return DecompilationResult.failure("Baksmali exit code: " + exit);
-            }
+            disassembleMethod.invoke(null, apk.toFile(), smaliDir.toFile());
 
             int classesDecompiled = (int) Files.walk(smaliDir)
                     .filter(Files::isRegularFile)
                     .filter(p -> p.toString().endsWith(".smali"))
                     .count();
 
-            return DecompilationResult.success(smaliDir, resDir, classesDecompiled, 0);
+            return DecompilationResult.success(smaliDir, outputDir.resolve("resources"),
+                    classesDecompiled, 0);
 
         } catch (Exception e) {
-            return DecompilationResult.failure("Baksmali error: " + e.getMessage());
+            return DecompilationResult.failure(
+                    "Baksmali no disponible (opcional, último recurso): " + e.getMessage()
+            );
         }
     }
 }

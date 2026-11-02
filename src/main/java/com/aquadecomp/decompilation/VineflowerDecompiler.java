@@ -1,10 +1,7 @@
 package com.aquadecomp.decompilation;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 
 public final class VineflowerDecompiler implements DecompilerStrategy {
 
@@ -18,7 +15,7 @@ public final class VineflowerDecompiler implements DecompilerStrategy {
     @Override
     public boolean isAvailable() {
         try {
-            Class.forName("org.jetbrains.java.decompiler.main.decompiler.Decompiler");
+            Class.forName("org.benf.cfr.reader.api.CfrDriver");
             return true;
         } catch (ClassNotFoundException e) {
             return false;
@@ -38,28 +35,15 @@ public final class VineflowerDecompiler implements DecompilerStrategy {
         Files.createDirectories(srcDir);
 
         try {
-            Map<String, Object> options = new HashMap<>();
-            options.put("rbr", true);
-            options.put("rsy", true);
-            options.put("din", true);
-            options.put("dc", true);
-            options.put("da", true);
-            options.put("dgs", true);
-            options.put("ner", true);
-            options.put("den", true);
-            options.put("udv", true);
-            options.put("eso", true);
+            Class<?> driverClass = Class.forName("org.benf.cfr.reader.api.CfrDriver");
+            Object driver = driverClass.getConstructor().newInstance();
 
-            Class<?> decompilerClass = Class.forName(
-                    "org.jetbrains.java.decompiler.main.decompiler.Decompiler"
+            java.lang.reflect.Method decodeMethod = driverClass.getMethod(
+                    "analyse", java.util.Collection.class
             );
 
-            Object decompiler = decompilerClass.getConstructor(
-                    Map.class, File.class, File.class
-            ).newInstance(options, apk.toFile(), srcDir.toFile());
-
-            java.lang.reflect.Method decompileMethod = decompilerClass.getMethod("decompileArchive");
-            decompileMethod.invoke(decompiler);
+            java.util.Collection<String> paths = java.util.List.of(apk.toString());
+            decodeMethod.invoke(driver, paths);
 
             int classesDecompiled = (int) Files.walk(srcDir)
                     .filter(Files::isRegularFile)
@@ -69,7 +53,7 @@ public final class VineflowerDecompiler implements DecompilerStrategy {
             return DecompilationResult.success(srcDir, resDir, classesDecompiled, 0);
 
         } catch (Exception e) {
-            return DecompilationResult.failure("Vineflower error: " + e.getMessage());
+            return DecompilationResult.failure("Vineflower no disponible (opcional): " + e.getMessage());
         }
     }
 }

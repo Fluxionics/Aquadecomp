@@ -2,7 +2,6 @@ package com.aquadecomp.decompilation;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public final class CfrDecompiler implements DecompilerStrategy {
 
@@ -32,29 +31,33 @@ public final class CfrDecompiler implements DecompilerStrategy {
 
         Files.createDirectories(outputDir);
         Path srcDir = outputDir.resolve("sources_cfr");
-        Path resDir = outputDir.resolve("resources");
         Files.createDirectories(srcDir);
 
         try {
             Class<?> driverClass = Class.forName("org.benf.cfr.reader.api.CfrDriver");
-            Object driver = driverClass.getConstructor().newInstance();
+            java.lang.reflect.Constructor<?> constructor = driverClass.getConstructor();
+            Object driver = constructor.newInstance();
 
-            java.lang.reflect.Method decodeMethod = driverClass.getMethod(
+            java.lang.reflect.Method analyseMethod = driverClass.getMethod(
                     "analyse", java.util.Collection.class
             );
 
-            java.util.Collection<String> paths = java.util.List.of(apk.toString());
-            decodeMethod.invoke(driver, paths);
+            java.util.Collection<String> paths = java.util.List.of(apk.toAbsolutePath().toString());
+            analyseMethod.invoke(driver, paths);
 
             int classesDecompiled = (int) Files.walk(srcDir)
                     .filter(Files::isRegularFile)
                     .filter(p -> p.toString().endsWith(".java"))
                     .count();
 
-            return DecompilationResult.success(srcDir, resDir, classesDecompiled, 0);
+            if (classesDecompiled == 0) {
+                return DecompilationResult.failure("CFR no generó archivos Java");
+            }
+
+            return DecompilationResult.success(srcDir, outputDir.resolve("resources"), classesDecompiled, 0);
 
         } catch (Exception e) {
-            return DecompilationResult.failure("CFR error: " + e.getMessage());
+            return DecompilationResult.failure("CFR no disponible (opcional): " + e.getMessage());
         }
     }
 }

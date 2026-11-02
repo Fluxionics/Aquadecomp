@@ -22,6 +22,20 @@ dependencies {
     implementation("com.google.code.gson:gson:2.15.0")
     implementation("com.formdev:flatlaf:3.7.2")
     implementation("org.benf:cfr:0.152")
+    
+    // Baksmali para Smali decompilation
+    implementation("org.smali:baksmali:2.5.2")
+    
+    // APKTool y recursos
+    implementation("com.google.guava:guava:32.1.3-jre")
+    
+    // Para parseo de XML y archivos
+    implementation("org.dom4j:dom4j:2.1.4")
+    implementation("commons-io:commons-io:2.13.0")
+    
+    // Logging
+    implementation("org.slf4j:slf4j-api:2.0.9")
+    implementation("ch.qos.logback:logback-classic:1.4.14")
 }
 
 application {

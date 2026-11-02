@@ -10,6 +10,8 @@ import java.util.stream.Stream;
 public final class ConfidenceScorer {
 
     private final ConfidenceMap map = new ConfidenceMap();
+    private final CompilationVerifier compilationVerifier = new CompilationVerifier();
+    private final SyntheticCodeDetector syntheticDetector = new SyntheticCodeDetector();
 
     public void scoreAll(String decompilerUsed, Path sourcesDir, Path resourcesDir,
                          String sourceFormat) throws IOException {
@@ -38,6 +40,20 @@ public final class ConfidenceScorer {
         int score = baseScore;
         List<String> issues = new ArrayList<>();
 
+        SyntheticCodeDetector.SyntheticAnalysis syntheticAnalysis = 
+                syntheticDetector.analyze(content, className);
+        
+        if (syntheticAnalysis.isSynthetic()) {
+            score += syntheticAnalysis.scoreAdjustment();
+            issues.addAll(syntheticAnalysis.indicators());
+        }
+
+        CompilationVerifier.VerificationResult verification = 
+                compilationVerifier.verify(file);
+        
+        score += verification.scoreAdjustment();
+        issues.addAll(verification.issues());
+
         if (content.contains("// JADX WARNING")) {
             score -= 15;
             issues.add("JADX warning presente");
@@ -58,9 +74,18 @@ public final class ConfidenceScorer {
             issues.add("Código sintético o faltante");
         }
 
-        if (countCompilationErrors(content) > 0) {
-            score -= 20;
-            issues.add("Errores de compilación detectados");
+        int compilationErrors = countCompilationErrors(content);
+        if (compilationErrors > 0) {
+            score -= Math.min(20, compilationErrors * 5);
+            issues.add("Errores de compilación: " + compilationErrors);
+        }
+
+        if (decompilerUsed.equals("CFR")) {
+            score = Math.max(score - 5, 0);
+        } else if (decompilerUsed.equals("Procyon")) {
+            score = Math.min(score + 5, 100);
+        } else if (decompilerUsed.equals("Baksmali")) {
+            score = Math.max(score - 15, 0);
         }
 
         score = Math.max(0, Math.min(100, score));
@@ -69,7 +94,7 @@ public final class ConfidenceScorer {
                 .decompiler(decompilerUsed)
                 .score(score)
                 .issues(issues)
-                .compiles(score > 50)
+                .compiles(verification.isStructurallyValid() && score > 40)
                 .format(sourceFormat)
                 .build();
 
@@ -83,7 +108,9 @@ public final class ConfidenceScorer {
                 "incompatible types",
                 "method not found",
                 "class not found",
-                "invalid method signature"
+                "invalid method signature",
+                "annotation not applicable",
+                "override incompatible"
         };
         for (String error : errors) {
             if (content.toLowerCase().contains(error)) {

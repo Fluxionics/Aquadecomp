@@ -17,6 +17,7 @@ public final class DecompilerChain {
     private void initializeStrategies() {
         strategies.add(new JadxDecompilerWrapper());
         strategies.add(new VineflowerDecompiler());
+        strategies.add(new ProcyonDecompiler());
         strategies.add(new CfrDecompiler());
         strategies.add(new BaksmaliDecompiler());
     }
@@ -27,13 +28,14 @@ public final class DecompilerChain {
         Path finalSourcesDir = null;
         Path finalResourcesDir = null;
         String selectedDecompiler = null;
+        int bestClassCount = 0;
 
         for (DecompilerStrategy strategy : strategies) {
             String strategyName = strategy.name();
 
             if (!strategy.isAvailable()) {
                 attempts.add(new AttemptResult(strategyName, false,
-                        strategyName + " no disponible", null, null, 0, 0));
+                        strategyName + " no disponible", null, null, 0, 0, false));
                 continue;
             }
 
@@ -45,24 +47,50 @@ public final class DecompilerChain {
                         strategy.decompile(apk, attemptDir, config);
 
                 if (result.success()) {
-                    finalSourcesDir = result.sourcesDir();
-                    finalResourcesDir = result.resourcesDir();
-                    selectedDecompiler = strategyName;
+                    int classCount = countJavaFiles(result.sourcesDir());
+                    
+                    if (classCount > bestClassCount) {
+                        bestClassCount = classCount;
+                    }
+
+                    if (classCount >= 50) {
+                        if (finalSourcesDir == null) {
+                            finalSourcesDir = result.sourcesDir();
+                            finalResourcesDir = result.resourcesDir();
+                            selectedDecompiler = strategyName;
+                        }
+                    }
 
                     attempts.add(new AttemptResult(strategyName, true, null,
                             result.sourcesDir(), result.resourcesDir(),
-                            result.classesDecompiled(), result.errors()));
+                            classCount, result.errors(), false));
 
-                    break;
+                    if (finalSourcesDir != null) {
+                        break;
+                    }
 
                 } else {
                     attempts.add(new AttemptResult(strategyName, false,
-                            result.message(), null, null, 0, result.errors()));
+                            result.message(), null, null, 0, result.errors(), false));
                 }
 
+            } catch (OutOfMemoryError e) {
+                attempts.add(new AttemptResult(strategyName, false,
+                        "OutOfMemoryError", null, null, 0, 0, false));
             } catch (Exception e) {
                 attempts.add(new AttemptResult(strategyName, false,
-                        "Exception: " + e.getMessage(), null, null, 0, -1));
+                        "Error: " + e.getMessage(), null, null, 0, -1, false));
+            }
+        }
+
+        if (finalSourcesDir == null && bestClassCount > 0) {
+            for (AttemptResult attempt : attempts) {
+                if (attempt.successful && attempt.classesDecompiled > 0) {
+                    finalSourcesDir = attempt.sourcesDir();
+                    finalResourcesDir = attempt.resourcesDir();
+                    selectedDecompiler = attempt.decompilerName();
+                    break;
+                }
             }
         }
 
@@ -73,8 +101,20 @@ public final class DecompilerChain {
                 finalSourcesDir,
                 finalResourcesDir,
                 selectedDecompiler,
-                attempts
+                attempts,
+                bestClassCount
         );
+    }
+
+    private int countJavaFiles(Path sourcesDir) {
+        try {
+            return (int) Files.walk(sourcesDir)
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .count();
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     public record AttemptResult(
@@ -84,7 +124,8 @@ public final class DecompilerChain {
             Path sourcesDir,
             Path resourcesDir,
             int classesDecompiled,
-            int errors
+            int errors,
+            boolean timedOut
     ) {
     }
 
@@ -93,7 +134,8 @@ public final class DecompilerChain {
             Path sourcesDir,
             Path resourcesDir,
             String selectedDecompiler,
-            List<AttemptResult> attempts
+            List<AttemptResult> attempts,
+            int bestClassCount
     ) {
         public boolean hasSucceeded() {
             return success && sourcesDir != null;
@@ -101,9 +143,9 @@ public final class DecompilerChain {
 
         public String getStatusSummary() {
             if (!success) {
-                return "Todas las estrategias fallaron";
+                return "Todas las estrategias fallaron (mejor: " + bestClassCount + " clases)";
             }
-            return "Éxito con " + selectedDecompiler;
+            return "Éxito con " + selectedDecompiler + " (" + bestClassCount + " clases)";
         }
     }
 }

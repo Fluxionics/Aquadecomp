@@ -5,7 +5,11 @@ import jadx.core.dex.nodes.ClassNode;
 import jadx.core.dex.nodes.FieldNode;
 import jadx.core.dex.nodes.MethodNode;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -33,13 +37,81 @@ public final class ObfuscationDetector {
     private static final Pattern P_DOLLAR = Pattern.compile("[a-zA-Z]{1,2}(\\$[a-zA-Z0-9]{1,2})+");
     private static final Pattern P_HEXISH = Pattern.compile("[a-fA-F0-9]{6,}");
     private static final Pattern P_PACKAGES = Pattern.compile("[a-zA-Z]{1,2}");
+    private static final Pattern ANON_CLASS = Pattern.compile("\\$\\d+");
 
-    public static ObfuscationInfo analyze(List<JavaClass> classes) {
+    public record Renames(Set<String> targets, int classes, int methods,
+                          int fields, int packages) {
+        public int totalIds() {
+            return classes + methods + fields + packages;
+        }
+    }
+
+    public static Renames loadRenames(Path jobf) {
+        Set<String> targets = new HashSet<>();
+        int c = 0, m = 0, f = 0, p = 0;
+        if (!Files.isRegularFile(jobf)) return new Renames(targets, 0, 0, 0, 0);
+        try {
+            for (String line : Files.readAllLines(jobf)) {
+                if (line.length() < 4) continue;
+                char kind = line.charAt(0);
+                if (kind != 'c' && kind != 'm' && kind != 'f' && kind != 'p') continue;
+                int idx = line.lastIndexOf(" = ");
+                if (idx < 0 || idx < 3) continue;
+                String original = line.substring(2, idx);
+                String target = line.substring(idx + 3).trim();
+                if (target.isEmpty()) continue;
+                targets.add(target);
+                if (renamedMeaningfulName(kind, original)) {
+                    switch (kind) {
+                        case 'c' -> c++;
+                        case 'm' -> m++;
+                        case 'f' -> f++;
+                        default -> p++;
+                    }
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        return new Renames(targets, c, m, f, p);
+    }
+
+    private static boolean renamedMeaningfulName(char kind, String original) {
+        switch (kind) {
+            case 'c' -> {
+                String simple = original.substring(original.lastIndexOf('.') + 1);
+                if (simple.equals("R") || simple.startsWith("R$")
+                        || simple.equals("BuildConfig") || simple.equals("Manifest")) return false;
+                if (simple.contains("$$")) return false;
+                return !ANON_CLASS.matcher(simple).find();
+            }
+            case 'm' -> {
+                int paren = original.indexOf('(');
+                String head = paren > 0 ? original.substring(0, paren) : original;
+                int lastDot = head.lastIndexOf('.');
+                String owner = head.substring(0, lastDot);
+                String name = head.substring(lastDot + 1);
+                if (owner.contains("$$")) return false;
+                if (name.startsWith("lambda$") || name.startsWith("invoke$")) return false;
+                return !looksObfuscated(name);
+            }
+            case 'f' -> {
+                String name = original.substring(original.lastIndexOf('.') + 1);
+                return !name.startsWith("this$") && !name.startsWith("val$")
+                        && !name.startsWith("type$");
+            }
+            default -> {
+                return true;
+            }
+        }
+    }
+
+    public static ObfuscationInfo analyze(List<JavaClass> classes, Renames renames) {
         int totalClasses = 0, obfClasses = 0;
         int totalMethods = 0, obfMethods = 0;
         int totalFields = 0, obfFields = 0;
         int obfPackages = 0, totalPackages = 0;
         List<String> signals = new ArrayList<>();
+        Set<String> substitutedNames = renames.targets();
 
         Set<String> seenPackages = new java.util.TreeSet<>();
         Set<String> obfSeenPackages = new java.util.TreeSet<>();
@@ -50,7 +122,7 @@ public final class ObfuscationDetector {
 
             totalClasses++;
             String simple = cn.getName();
-            if (looksObfuscated(simple)) obfClasses++;
+            if (!substitutedNames.contains(simple) && looksObfuscated(simple)) obfClasses++;
 
             String fullName = cn.getFullName();
             int lastDot = fullName.lastIndexOf('.');
@@ -73,14 +145,14 @@ public final class ObfuscationDetector {
 
             for (MethodNode m : cn.getMethods()) {
                 totalMethods++;
-                if (looksObfuscated(m.getName())) obfMethods++;
+                if (!substitutedNames.contains(m.getName()) && looksObfuscated(m.getName())) obfMethods++;
             }
             for (FieldNode f : cn.getFields()) {
                 totalFields++;
                 String n = f.getName();
 
                 if (n.startsWith("this$") || n.startsWith("val$") || n.startsWith("type$")) continue;
-                if (looksObfuscated(n)) obfFields++;
+                if (!substitutedNames.contains(n) && looksObfuscated(n)) obfFields++;
             }
         }
         obfPackages = obfSeenPackages.size();
@@ -94,6 +166,15 @@ public final class ObfuscationDetector {
         double fieldRatio = totalFields == 0 ? 0 : (double) obfFields / totalFields;
         double pkgRatio = totalPackages == 0 ? 0 : (double) obfPackages / totalPackages;
         double ratio = 0.35 * classRatio + 0.40 * methodRatio + 0.15 * fieldRatio + 0.10 * pkgRatio;
+
+        double substClassRatio = totalClasses == 0 ? 0 : (double) renames.classes() / totalClasses;
+        double substMethodRatio = totalMethods == 0 ? 0 : (double) renames.methods() / totalMethods;
+        double substFieldRatio = totalFields == 0 ? 0 : (double) renames.fields() / totalFields;
+        double substPkgRatio = totalPackages == 0 ? 0 : (double) renames.packages() / totalPackages;
+        double substitutedRatio = Math.min(1.0,
+                0.35 * substClassRatio + 0.40 * substMethodRatio
+                        + 0.15 * substFieldRatio + 0.10 * substPkgRatio);
+        int substitutedIds = renames.totalIds();
 
         String level;
         if (ratio < 0.05) level = "NONE";
@@ -112,6 +193,14 @@ public final class ObfuscationDetector {
                     "%.1f%% de campos ofuscados (%d/%d)",
                     fieldRatio * 100, obfFields, totalFields));
         }
+        if (substitutedIds > 0) {
+            signals.add(String.format(Locale.ROOT,
+                    "%d identificadores renombrados por la desofuscación: son sustitutos "
+                            + "generados, no los nombres originales (clases %d, métodos %d, "
+                            + "campos %d, paquetes %d)",
+                    substitutedIds, renames.classes(), renames.methods(),
+                    renames.fields(), renames.packages()));
+        }
         if (obfPackages > 0) {
             signals.add(String.format(Locale.ROOT,
                     "%d paquetes con nombres de 1-2 letras (p. ej. a.b.c)", obfPackages));
@@ -121,8 +210,8 @@ public final class ObfuscationDetector {
         }
 
         return new ObfuscationInfo(totalClasses, obfClasses, totalMethods, obfMethods,
-                totalFields, obfFields, obfPackages, ratio, level,
-                List.copyOf(signals), false);
+                totalFields, obfFields, obfPackages, substitutedIds, ratio, substitutedRatio,
+                level, List.copyOf(signals), false);
     }
 
     public static ObfuscationInfo withStringEncryption(ObfuscationInfo info, boolean likely) {
@@ -133,7 +222,8 @@ public final class ObfuscationDetector {
         return new ObfuscationInfo(info.totalClasses(), info.obfuscatedClasses(),
                 info.totalMethods(), info.obfuscatedMethods(),
                 info.totalFields(), info.obfuscatedFields(),
-                info.obfuscatedPackages(), info.obfuscatedRatio(),
+                info.obfuscatedPackages(), info.substitutedIds(),
+                info.obfuscatedRatio(), info.substitutedRatio(),
                 info.level().equals("NONE") ? "LOW" : info.level(),
                 List.copyOf(sig), true);
     }

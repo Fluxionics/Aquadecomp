@@ -44,10 +44,12 @@ public final class EffectivenessCalculator {
                     "%d errores y %d advertencias de descompilación sobre %d clases (%.1f%% limpio)",
                     stats.errors(), stats.warns(), stats.classesTotal(), integrity * 100);
 
-            double identifiers = Math.max(0, 1 - obf.obfuscatedRatio());
+            double identifiers = Math.max(0, 1 - obf.identifierLossRatio());
             String identifierDetail = String.format(Locale.ROOT,
-                    "%.1f%% de nombres recuperados/no ofuscados (nivel de ofuscación: %s)",
-                    identifiers * 100, obf.level());
+                    "%.1f%% de nombres recuperados (%.1f%% ofuscados, %.1f%% sustituidos "
+                            + "por la desofuscación; nivel de ofuscación: %s)",
+                    identifiers * 100, obf.obfuscatedRatio() * 100,
+                    obf.substitutedRatio() * 100, obf.level());
 
             double resource;
             String resourceDetail;
@@ -83,11 +85,13 @@ public final class EffectivenessCalculator {
             if (stats.errors() == 0) strengths.add("Sin errores de descompilación");
             else limitations.add(stats.errors() + " errores de descompilación: esas partes del código pueden estar incompletas");
 
-            if (obf.obfuscatedRatio() < 0.05) strengths.add("Nombres de clases/métodos aparentemente originales");
+            if (obf.identifierLossRatio() < 0.05) strengths.add("Nombres de clases/métodos aparentemente originales");
             else limitations.add(String.format(Locale.ROOT,
-                    "%.0f%% de los identificadores siguen ofuscados: los nombres "
-                            + "recuperados son sustitutos, no los originales",
-                    obf.obfuscatedRatio() * 100));
+                    "%.0f%% de los identificadores no son originales (%.0f%% ofuscados "
+                            + "y %.0f%% sustituidos con nombres generados por la desofuscación)",
+                    obf.identifierLossRatio() * 100,
+                    obf.obfuscatedRatio() * 100,
+                    obf.substitutedRatio() * 100));
 
             if (obf.likelyStringEncryption()) {
                 limitations.add("Cadenas de texto posiblemente cifradas: los valores "

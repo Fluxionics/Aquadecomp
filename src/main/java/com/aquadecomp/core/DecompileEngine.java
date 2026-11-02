@@ -62,11 +62,6 @@ public final class DecompileEngine {
             listener.onProgress(20, "DEX cargado: "
                     + decompiler.getClassesWithInners().size() + " clases");
 
-            listener.onStage("ANALIZANDO OFUSCACIÓN");
-            ObfuscationInfo obf = ObfuscationDetector.analyze(decompiler.getClasses());
-            listener.onLog("Nivel de ofuscación: " + obf.level()
-                    + String.format(" (%.1f%% identificadores ofuscados)", obf.obfuscatedRatio() * 100));
-
             listener.onStage("DESCOMPILANDO A JAVA");
             AtomicLong lastReport = new AtomicLong();
             decompiler.save(250, (current, total) -> {
@@ -109,6 +104,14 @@ public final class DecompileEngine {
             boolean manifestOk = Files.isRegularFile(resDir.resolve("AndroidManifest.xml"));
 
             long duration = System.currentTimeMillis() - start;
+
+            listener.onStage("ANALIZANDO OFUSCACIÓN");
+            ObfuscationDetector.Renames renames = ObfuscationDetector.loadRenames(
+                    outDir.resolve("aquedecomp-renames.jobf"));
+            ObfuscationInfo obf = ObfuscationDetector.analyze(decompiler.getClassesWithInners(), renames);
+            listener.onLog("Nivel de ofuscación: " + obf.level()
+                    + String.format(" (%.1f%% ofuscados, %.1f%% renombrados por desofuscación)",
+                    obf.obfuscatedRatio() * 100, obf.substitutedRatio() * 100));
 
             listener.onStage("ESCANEANDO CADENAS");
             boolean stringEnc = scanStringEncryption(srcDir);

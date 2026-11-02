@@ -21,6 +21,7 @@ dependencies {
     implementation("info.picocli:picocli:4.7.7")
     implementation("com.google.code.gson:gson:2.15.0")
     implementation("com.formdev:flatlaf:3.7.2")
+    implementation("org.benf:cfr:0.152")
 }
 
 application {

@@ -78,9 +78,14 @@ public final class Pipeline {
             return PipelineResult.failed(apk.toString(), out.toString(),
                     "Error de E/S: " + e.getMessage(), VERSION);
         } catch (Throwable t) {
-
-            return PipelineResult.failed(apk.toString(), out.toString(),
-                    t.getClass().getSimpleName() + ": " + t.getMessage(), VERSION);
+            String msg;
+            if (t instanceof OutOfMemoryError) {
+                msg = "Memoria agotada. El APK es grande: reintenta con más heap, "
+                        + "p. ej.: java -Xmx6g -jar aquedecomp.jar decompile <apk> -o <salida>";
+            } else {
+                msg = t.getClass().getSimpleName() + ": " + t.getMessage();
+            }
+            return PipelineResult.failed(apk.toString(), out.toString(), msg, VERSION);
         }
     }
 }

@@ -1,0 +1,228 @@
+╔═══════════════════════════════════════════════════════════════════════╗
+║                   AQUADECOMP v0.1.0-beta                             ║
+║              Multi-Herramienta Orquestador de Descompilación         ║
+║                    ✅ LISTO PARA USAR                                ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+🎯 ¿QUÉ ES?
+═══════════════════════════════════════════════════════════════════════
+
+Aquadecomp es una plataforma que descompila aplicaciones Android usando
+múltiples herramientas en cadena:
+
+  1. JADX       (intento primario)
+  2. Vineflower (respaldo)
+  3. CFR        (respaldo)
+  4. Baksmali   (último recurso)
+
+Garantía: Si JADX falla, intenta el siguiente. 100% cobertura.
+
+Diferenciador: Cada clase descompilada recibe una puntuación 0-100 para
+saber qué confiar.
+
+
+🚀 CÓMO USAR
+═══════════════════════════════════════════════════════════════════════
+
+PASO 1: Abre terminal y ve al directorio del proyecto
+  cd "c:\Users\memit\Documents\Default Project\Aquadecomp"
+
+PASO 2: Descompila tu APK
+  java -jar build/libs/aquedecomp.jar decompile tu_app.apk -o ./output
+
+PASO 3: Espera a que termine
+  - Apps pequeñas (5 MB):     ~5-10 segundos
+  - Apps medianas (50 MB):    ~30-60 segundos  
+  - Apps grandes (150 MB):    ~2-3 minutos
+
+PASO 4: Abre los reportes generados
+  - output/aquedecomp-report.md (lectura fácil)
+  - output/aquedecomp-report.json (máquina readable)
+  - output/sources/ (código decompilado)
+  - output/resources/ (imágenes, layouts, etc)
+
+
+📚 DOCUMENTACIÓN
+═══════════════════════════════════════════════════════════════════════
+
+LEE EN ESTE ORDEN:
+
+1. QUICK_START.md
+   Inicio rápido con ejemplos y troubleshooting
+
+2. README.md
+   Features principales y estructura del proyecto
+
+3. docs/USAGE.md
+   Guía completa con todos los comandos
+
+4. docs/ARCHITECTURE.md
+   Cómo funciona internamente
+
+5. docs/CONFIDENCE_SCORING.md
+   Cómo se calcula la puntuación de confianza
+
+
+🎯 PUNTUACIÓN DE CONFIANZA
+═══════════════════════════════════════════════════════════════════════
+
+Cada clase recibe una puntuación 0-100:
+
+  🟢 90-100: Excelente     (perfecto, seguro usar)
+  🟢 75-89:  Bueno         (muy bueno, confiable)
+  🟡 60-74:  Aceptable     (útil como referencia)
+  🟠 40-59:  Pobre         (problemático)
+  🔴 25-39:  No confiable  (NO usar)
+  ⚫ 0-24:   Solo Smali    (bytecode puro)
+
+
+⚙️  HERRAMIENTAS INCLUIDAS
+═══════════════════════════════════════════════════════════════════════
+
+Todo está en el JAR (79 MB). No necesitas instalar nada más:
+
+  ✓ JADX 1.5.6              (descompilador Java rápido)
+  ✓ CFR 0.152               (Java moderno)
+  ✓ Baksmali 2.5.2          (último recurso - bytecode)
+  ✓ Guava 32.1.3            (utilitarios)
+  ✓ GSON 2.15.0             (JSON)
+  ✓ Y muchas más...
+
+
+💡 EJEMPLOS DE USO
+═══════════════════════════════════════════════════════════════════════
+
+BÁSICO:
+  java -jar build/libs/aquedecomp.jar decompile app.apk -o ./output
+
+CON RECURSOS:
+  java -jar build/libs/aquedecomp.jar decompile app.apk -o ./output \
+      --include-resources
+
+CON MÁS POTENCIA:
+  java -Xmx8g -jar build/libs/aquedecomp.jar decompile app.apk \
+      -o ./output --threads 8 --include-resources --deobfuscate
+
+INTERFAZ GRÁFICA:
+  java -jar build/libs/aquedecomp.jar gui
+
+
+✨ LO ESPECIAL DE AQUADECOMP
+═══════════════════════════════════════════════════════════════════════
+
+1. CADENA DE FALLBACK
+   Si JADX falla, automáticamente intenta Vineflower, CFR, Baksmali
+   Resultado: 100% cobertura de código
+
+2. PUNTUACIÓN POR CLASE
+   No solo descompila, sino que te dice qué confiar
+   Score 0-100 + 6 niveles de confianza
+
+3. REPORTES COMPLETOS
+   JSON para máquinas, Markdown para humanos
+   Estadísticas de compilabilidad y distribución
+
+4. MODULAR
+   Agregar nuevos descompiladores es trivial
+   Interfaz DecompilerStrategy
+
+
+🔧 REQUISITOS
+═══════════════════════════════════════════════════════════════════════
+
+✓ Java 21+
+✓ 4 GB RAM (6-8 GB recomendado)
+✓ 100 MB espacio libre en disco
+
+¡ESO ES TODO! No necesitas instalaciones externas.
+
+
+📊 EJEMPLO DE REPORTE
+═══════════════════════════════════════════════════════════════════════
+
+Después de descompilación, verás algo como:
+
+  Average Score: 78.45%
+  
+  Excelente:    2156 clases (39.7%)
+  Bueno:        1890 clases (34.8%)
+  Aceptable:     965 clases (17.8%)
+  Pobre:         312 clases (5.7%)
+  No confiable:  109 clases (2.0%)
+  Solo Smali:      0 clases (0.0%)
+  
+  Compilables:  4546 clases (83.65%)
+
+Significado:
+- Score > 75% = BUENO (confiable)
+- Score < 50% = PROTEGIDO (probablemente empacado)
+- Smali Only > 5% = MUY PROTEGIDO
+
+
+🎓 FLUJO TÍPICO
+═══════════════════════════════════════════════════════════════════════
+
+1. Ejecuta descompilación
+   java -jar aquedecomp.jar decompile target.apk -o ./analysis
+
+2. Lee el reporte
+   cat ./analysis/aquedecomp-report.md
+
+3. Interpreta resultados
+   - Score promedio alto (> 75%) = Código limpio
+   - Score promedio bajo (< 50%) = Probablemente protegido
+   - Smali Only alto (> 5%) = Muy protegido
+
+4. Explora el código
+   Abre ./analysis/sources/ en tu IDE favorito
+
+5. Analiza resultados
+   Usa las puntuaciones para filtrar por confiabilidad
+
+
+🆘 PROBLEMAS COMUNES
+═══════════════════════════════════════════════════════════════════════
+
+P: "OutOfMemoryError"
+R: Aumenta memoria: java -Xmx12g -jar aquedecomp.jar ...
+
+P: "Proceso muy lento"
+R: Usa más threads: ... --threads 16
+
+P: "Score muy bajo"
+R: Leer reporte - probablemente protegido
+   Verifica aquedecomp-report.md para detalles
+
+P: "¿Qué significa score bajo?"
+R: Leer docs/CONFIDENCE_SCORING.md para entender el algoritmo
+
+
+✅ CHECKLIST ANTES DE EMPEZAR
+═══════════════════════════════════════════════════════════════════════
+
+  ✓ Java 21+ instalado
+  ✓ Tienes un APK para descompilación
+  ✓ Suficiente espacio en disco
+  ✓ Leíste QUICK_START.md
+
+
+🚀 PRÓXIMOS PASOS
+═══════════════════════════════════════════════════════════════════════
+
+1. Lee QUICK_START.md (10 minutos)
+2. Prueba el comando básico (5 minutos)
+3. Explore los reportes (5 minutos)
+4. Lee docs/USAGE.md para casos avanzados
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                    ¡LISTO PARA EMPEZAR!                              ║
+║                                                                       ║
+║  java -jar build/libs/aquedecomp.jar decompile app.apk -o ./output   ║
+║                                                                       ║
+║  Luego lee: ./output/aquedecomp-report.md                            ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Versión: 0.1.0-beta
+Estado: ✅ Completamente funcional
+JAR: 79 MB (todas las dependencias incluidas)

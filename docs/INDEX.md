@@ -1,6 +1,6 @@
-# Documentación de Aquadecomp v0.3
+# Documentación de Aquadecomp v0.4
 
-Aquadecomp es una plataforma multi-herramienta de descompilación de aplicaciones Android que integra JADX, Vineflower, Procyon, CFR y Baksmali en una cadena de respaldo. **La v0.3 añade motores de recuperación para lograr 95%+ de efectividad en código ofuscado.**
+Aquadecomp es una plataforma multi-herramienta de descompilación de aplicaciones Android que integra JADX, Vineflower, Procyon, CFR y Baksmali en una cadena de respaldo. **v0.3 añade motores de recuperación (95%+ efectividad). v0.4 añade ejecución paralela (6-8x speedup).**
 
 ## Guías Principales
 
@@ -42,6 +42,12 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - MetadataExtractor
   - RealCompilationVerifier
   - RecoveryPipeline
+
+- [Ejecución Paralela (PARALLEL_RECOVERY.md)](PARALLEL_RECOVERY.md) - NEW en v0.4:
+  - ParallelRecoveryPipeline (6-8x speedup)
+  - RecoveryEnginePool (thread-safe pool)
+  - Configuración de threads
+  - Benchmarks y escalabilidad
 
 ## Estructura de Proyecto
 
@@ -246,5 +252,5 @@ Ver LICENSE
 ---
 
 **Última actualización**: Noviembre 2025
-**Versión**: 0.3.0
-**Estado**: Recuperación completa con 95%+ efectividad en código ofuscado
+**Versión**: 0.4.0
+**Estado**: Parallelización completa - 6-8x faster recovery execution

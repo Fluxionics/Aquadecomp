@@ -1,5 +1,6 @@
 package com.aquadecomp.verification;
 
+import com.aquadecomp.recovery.RecoveryPipeline;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,12 +13,16 @@ public final class ConfidenceScorer {
     private final ConfidenceMap map = new ConfidenceMap();
     private final CompilationVerifier compilationVerifier = new CompilationVerifier();
     private final SyntheticCodeDetector syntheticDetector = new SyntheticCodeDetector();
+    private final RecoveryPipeline recoveryPipeline = new RecoveryPipeline();
 
     public void scoreAll(String decompilerUsed, Path sourcesDir, Path resourcesDir,
                          String sourceFormat) throws IOException {
         if (!Files.isDirectory(sourcesDir)) {
             return;
         }
+
+        RecoveryPipeline.RecoveryResult recoveryResult = 
+                recoveryPipeline.recover(sourcesDir, resourcesDir);
 
         try (Stream<Path> walk = Files.walk(sourcesDir)) {
             walk.filter(Files::isRegularFile)
@@ -39,6 +44,16 @@ public final class ConfidenceScorer {
         int baseScore = sourceFormat.equalsIgnoreCase("SMALI") ? 10 : 75;
         int score = baseScore;
         List<String> issues = new ArrayList<>();
+
+        RecoveryPipeline.RecoveryMetrics recoveryMetrics = 
+                recoveryPipeline.getMetrics().get(file.toString());
+        
+        if (recoveryMetrics != null) {
+            score += recoveryMetrics.compilationScore() / 10;
+            if (recoveryMetrics.wasRecovered()) {
+                issues.add("Recuperación aplicada: " + recoveryMetrics.recoveredItems());
+            }
+        }
 
         SyntheticCodeDetector.SyntheticAnalysis syntheticAnalysis = 
                 syntheticDetector.analyze(content, className);

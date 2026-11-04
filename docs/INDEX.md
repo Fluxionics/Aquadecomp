@@ -1,10 +1,10 @@
 # Documentación de Aquadecomp v0.7
 
-Aquadecomp es una plataforma multi-herramienta de descompilación de aplicaciones Android que integra JADX, Vineflower, Procyon, CFR y Baksmali en una cadena de respaldo. **v0.3 añade motores de recuperación (95%+ efectividad). v0.4 añade ejecución paralela (6-8x speedup). v0.5 añade caché de compilación (10-104x speedup). v0.6 añade caché persistente + métricas. v0.7 añade Redis distribuido para clusters multi-máquina (50-200x speedup en pipelines CI/CD).**
+Aquadecomp es una plataforma multi-herramienta de descompilación de aplicaciones Android: JADX es el motor principal y CFR, Procyon y Vineflower rescatan las clases que falten. Las versiones v0.3 a v0.7 añadieron motores de recuperación, ejecución paralela, caché de compilación y caché distribuida; esos componentes son experimentales y todavía no forman parte del flujo principal (ver [README.md](../README.md)).
 
 ## Guías Principales
 
-### 👤 Para Usuarios
+### Para Usuarios
 **Comienza aquí si quieres usar Aquadecomp**
 
 - [Inicio Rápido](../README.md) - Instalación, primer uso, características principales
@@ -15,7 +15,7 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Troubleshooting
   - Scripting
 
-### 👨‍💻 Para Desarrolladores
+### Para Desarrolladores
 **Comienza aquí si quieres entender o extender Aquadecomp**
 
 - [Arquitectura (ARCHITECTURE.md)](ARCHITECTURE.md) - Diseño de capas:
@@ -27,14 +27,14 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Reporting Layer (generación de reportes)
   - Cómo agregar nuevos descompiladores
 
-- [Sistema de Confianza (CONFIDENCE_SCORING.md)](CONFIDENCE_SCORING.md) - Metodología de puntuación:
+- [Sistema de Confianza (CONFIDENCE_SCORING.md)](CONFIDENCE_SCORING.md) - experimental, metodología de puntuación:
   - Cómo se calcula la puntuación 0-100
   - 6 niveles de confianza
   - Integración con motores de recuperación
   - Interpretación de resultados
   - Estadísticas agregadas
 
-- [Motores de Recuperación (RECOVERY_ENGINES.md)](RECOVERY_ENGINES.md) - NEW en v0.3:
+- [Motores de Recuperación (RECOVERY_ENGINES.md)](RECOVERY_ENGINES.md) - v0.3, experimental:
   - StringDecryptionEngine
   - NameRecoveryEngine
   - DeobfuscationEngine
@@ -43,25 +43,25 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - RealCompilationVerifier
   - RecoveryPipeline
 
-- [Ejecución Paralela (PARALLEL_RECOVERY.md)](PARALLEL_RECOVERY.md) - NEW en v0.4:
+- [Ejecución Paralela (PARALLEL_RECOVERY.md)](PARALLEL_RECOVERY.md) - v0.4, experimental:
   - ParallelRecoveryPipeline (6-8x speedup)
   - RecoveryEnginePool (thread-safe pool)
   - Configuración de threads
   - Benchmarks y escalabilidad
 
-- [Caché y Monitoreo (V0.5_COMPILATION_CACHE_AND_PROGRESS.md)](V0.5_COMPILATION_CACHE_AND_PROGRESS.md) - NEW en v0.5:
+- [Caché y Monitoreo (V0.5_COMPILATION_CACHE_AND_PROGRESS.md)](V0.5_COMPILATION_CACHE_AND_PROGRESS.md) - v0.5, experimental:
   - CompilationCache (SHA-256 based)
   - RecoveryProgressListener (event callbacks)
   - Cache statistics
   - 10-104x speedup on incremental builds
 
-- [Caché Persistente y Métricas (V0.6_PERSISTENT_CACHE_AND_METRICS.md)](V0.6_PERSISTENT_CACHE_AND_METRICS.md) - NEW en v0.6:
+- [Caché Persistente y Métricas (V0.6_PERSISTENT_CACHE_AND_METRICS.md)](V0.6_PERSISTENT_CACHE_AND_METRICS.md) - v0.6, experimental:
   - PersistentCompilationCache (LRU eviction)
   - ThreadMetricsCollector (CPU/memory monitoring)
   - Two-layer hybrid caching
   - Thread pool optimization
 
-- [Caché Distribuida con Redis (V0.7_DISTRIBUTED_REDIS_CACHE.md)](V0.7_DISTRIBUTED_REDIS_CACHE.md) - NEW en v0.7:
+- [Caché Distribuida con Redis (V0.7_DISTRIBUTED_REDIS_CACHE.md)](V0.7_DISTRIBUTED_REDIS_CACHE.md) - v0.7, experimental:
   - DistributedRedisCache (cluster-wide sharing)
   - HybridCacheManager (3-layer orchestration)
   - Multi-machine CI/CD integration
@@ -87,11 +87,11 @@ aquadecomp/
 │   ├── decompilation/
 │   │   ├── DecompilerStrategy.java
 │   │   ├── DecompilerChain.java
+│   │   ├── Dex2JarConverter.java
 │   │   ├── JadxDecompilerWrapper.java
 │   │   ├── VineflowerDecompiler.java
 │   │   ├── ProcyonDecompiler.java
-│   │   ├── CfrDecompiler.java
-│   │   └── BaksmaliDecompiler.java
+│   │   └── CfrDecompiler.java
 │   ├── recovery/                ← NEW v0.3, enhanced v0.4-v0.7
 │   │   ├── StringDecryptionEngine.java
 │   │   ├── NameRecoveryEngine.java
@@ -159,28 +159,28 @@ aquadecomp/
 
 ## Características Clave
 
-### ✅ Cadena de Descompiladores
+### Cadena de Descompiladores
 ```
-APK → JADX → (si falla) → Vineflower → (si falla) → CFR → (si falla) → Baksmali
+APK → JADX (principal) → clases faltantes → dex2jar → CFR → Procyon → Vineflower
 ```
-**Resultado**: 100% cobertura, aunque formato varíe
+**Resultado**: más clases en `sources/` que con JADX solo
 
-### ✅ Sistema de Confianza
+### Sistema de Confianza
 Cada clase recibe puntuación 0-100 con 6 niveles:
-- 🟢 Excelente (90-100)
-- 🟢 Bueno (75-89)
-- 🟡 Aceptable (60-74)
-- 🟠 Pobre (40-59)
-- 🔴 No confiable (25-39)
-- ⚫ Solo Smali (0-24)
+- Excelente (90-100)
+- Bueno (75-89)
+- Aceptable (60-74)
+- Pobre (40-59)
+- No confiable (25-39)
+- Solo Smali (0-24)
 
-### ✅ Soporte Multi-Formato
+### Soporte Multi-Formato
 - APK (Android Packages)
 - AAB (Android App Bundles)
 - XAPK (Expandidos)
 - APKS (Splits)
 
-### ✅ Reportes Comprehensivos
+### Reportes Comprehensivos
 - JSON: Estructurado, machine-readable
 - Markdown: Legible, para humanos
 
@@ -210,8 +210,8 @@ Ejemplo de proyecto bien descompilado:
 # Básico
 java -jar aquedecomp.jar decompile app.apk -o ./output
 
-# Con recursos
-java -jar aquedecomp.jar decompile app.apk -o ./output --include-resources
+# Sin recursos (más rápido)
+java -jar aquedecomp.jar decompile app.apk -o ./output --no-resources
 
 # Con optimizaciones
 java -jar aquedecomp.jar decompile app.apk -o ./output --threads 8
@@ -254,7 +254,7 @@ R: No, es completamente local.
 R: 4GB mínimo, 6-8GB recomendado para APKs grandes (>150MB).
 
 **P: ¿Qué pasa si un descompilador falla?**
-R: La cadena continúa automáticamente con el siguiente (JADX → Vineflower → CFR → Baksmali).
+R: Si JADX no genera una clase, CFR, Procyon y Vineflower intentan rescatarla a partir del APK convertido a JAR con dex2jar.
 
 **P: ¿Por qué algunas clases tienen score bajo?**
 R: Probable ofuscación, packers, código sintético o problemas de compilación. Ver [CONFIDENCE_SCORING.md](CONFIDENCE_SCORING.md).

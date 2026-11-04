@@ -37,12 +37,12 @@ public final class ReportWriter {
         sb.append("- **Versión Aquadecomp:** ").append(r.toolVersion()).append("\n\n");
 
         if (!r.success()) {
-            sb.append("## ❌ Error\n\n").append(r.errorMessage()).append('\n');
+            sb.append("## Error\n\n").append(r.errorMessage()).append('\n');
             return sb.toString();
         }
 
         EffectivenessReport e = r.effectiveness();
-        sb.append("## 🎯 Efectividad global: ").append(e.overallScore()).append("/100\n\n");
+        sb.append("## Efectividad global: ").append(e.overallScore()).append("/100\n\n");
         sb.append("| Dimensión | Puntaje | Detalle |\n|---|---:|---|\n");
         sb.append("| Cobertura | ").append(e.coverageScore()).append(" | ").append(cell(e.coverageDetail())).append(" |\n");
         sb.append("| Integridad | ").append(e.integrityScore()).append(" | ").append(cell(e.integrityDetail())).append(" |\n");
@@ -51,7 +51,7 @@ public final class ReportWriter {
         sb.append("| Recursos | ").append(resScore).append(" | ").append(cell(e.resourceDetail())).append(" |\n\n");
 
         ManifestInfo m = r.manifest();
-        sb.append("## 📱 Aplicación\n\n");
+        sb.append("## Aplicación\n\n");
         if (m.parsedOk()) {
             sb.append("- **Paquete:** ").append(m.packageName()).append('\n');
             if (m.versionName() != null) sb.append("- **Versión:** ").append(m.versionName());
@@ -64,12 +64,12 @@ public final class ReportWriter {
             }
             sb.append("- **Debuggable:** ").append(m.debuggable()).append('\n');
         } else {
-            sb.append("- ⚠ No se pudo leer: ").append(m.parseError()).append('\n');
+            sb.append("- Aviso, no se pudo leer: ").append(m.parseError()).append('\n');
         }
         sb.append('\n');
 
         ObfuscationInfo o = r.obfuscation();
-        sb.append("## 🕵️ Ofuscación detectada: ").append(o.level()).append("\n\n");
+        sb.append("## Ofuscación detectada: ").append(o.level()).append("\n\n");
         for (String s : o.signals()) sb.append("- ").append(s).append('\n');
         if (!r.structure().detectedPackers().isEmpty()) {
             sb.append("\n**Packers/protectores:** ");
@@ -78,7 +78,7 @@ public final class ReportWriter {
         sb.append('\n');
 
         DecompileStats st = r.stats();
-        sb.append("## 📊 Estadísticas\n\n");
+        sb.append("## Estadísticas\n\n");
         sb.append("| Métrica | Valor |\n|---|---:|\n");
         sb.append("| Clases totales | ").append(st.classesTotal()).append(" |\n");
         sb.append("| Clases con código | ").append(st.classesWithCode()).append(" |\n");
@@ -88,18 +88,18 @@ public final class ReportWriter {
         sb.append("| Líneas de código | ").append(st.sourceLines()).append(" |\n");
         sb.append("| Duración | ").append(String.format(Locale.ROOT, "%.1f s", st.durationMs() / 1000.0)).append(" |\n\n");
 
-        sb.append("## ✅ Fortalezas\n\n");
+        sb.append("## Fortalezas\n\n");
         for (String s : e.strengths()) sb.append("- ").append(s).append('\n');
-        sb.append("\n## ⚠️ Limitaciones\n\n");
+        sb.append("\n## Limitaciones\n\n");
         for (String s : e.limitations()) sb.append("- ").append(s).append('\n');
 
-        sb.append("\n## 📖 Metodología del puntaje\n\n").append(e.methodology()).append('\n');
+        sb.append("\n## Metodología del puntaje\n\n").append(e.methodology()).append('\n');
         return sb.toString();
     }
 
     public static String consoleSummary(PipelineResult r) {
         if (!r.success()) {
-            return "❌ Falló: " + r.errorMessage();
+            return "Falló: " + r.errorMessage();
         }
         EffectivenessReport e = r.effectiveness();
         StringBuilder sb = new StringBuilder();

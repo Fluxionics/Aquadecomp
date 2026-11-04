@@ -169,14 +169,7 @@ public final class DistributedRedisCache {
     }
 
     public void flushAll() {
-        if (!enabled) {
-            return;
-        }
-
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.flushDB();
-        } catch (Exception ignored) {
-        }
+        invalidateAll();
     }
 
     public DistributedCacheStats getStats() {

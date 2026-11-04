@@ -17,15 +17,21 @@ public enum ConfidenceLevel {
     }
 
     public static ConfidenceLevel fromScore(int score) {
-        return switch (score) {
-            case 100, 95, 90 -> EXCELLENT;
-            case 89, 88, 87, 86, 85, 84, 83, 82, 81, 80 -> GOOD;
-            case 79, 78, 77, 76, 75, 74, 73, 72, 71, 70 -> ACCEPTABLE;
-            case 69, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50 ->
-                    POOR;
-            case 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25 ->
-                    UNRELIABLE;
-            default -> SMALI_FALLBACK;
-        };
+        if (score >= 90) {
+            return EXCELLENT;
+        }
+        if (score >= 75) {
+            return GOOD;
+        }
+        if (score >= 60) {
+            return ACCEPTABLE;
+        }
+        if (score >= 40) {
+            return POOR;
+        }
+        if (score >= 25) {
+            return UNRELIABLE;
+        }
+        return SMALI_FALLBACK;
     }
 }

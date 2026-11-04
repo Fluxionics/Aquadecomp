@@ -398,7 +398,7 @@ java -jar aquadecomp.jar --verify-compilation false
 **Result**: 
 - Files processed: 500
 - Files recovered: 487
-- Recovery rate: **97.4%** ✅ SUCCESS
+- Recovery rate: **97.4%** SUCCESS
 
 ---
 
@@ -420,7 +420,7 @@ java -jar aquadecomp.jar --verify-compilation false
 **Result**:
 - Files processed: 150
 - Files recovered: 149
-- Recovery rate: **99.3%** ✅ SUCCESS
+- Recovery rate: **99.3%** SUCCESS
 
 ---
 

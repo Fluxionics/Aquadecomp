@@ -140,7 +140,7 @@ public class AquaCli implements Runnable {
                 if (structure.detectedPackers().isEmpty()) {
                     System.out.println("Sin packers conocidos detectados");
                 } else {
-                    structure.detectedPackers().forEach(p -> System.out.println("   ⚠ " + p));
+                    structure.detectedPackers().forEach(p -> System.out.println("   Aviso: " + p));
                 }
                 if (!structure.warnings().isEmpty()) {
                     System.out.println("-- Avisos --");

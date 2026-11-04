@@ -1,7 +1,18 @@
 package com.aquadecomp.decompilation;
 
+import com.strobel.assembler.metadata.JarTypeLoader;
+import com.strobel.decompiler.Decompiler;
+import com.strobel.decompiler.DecompilerSettings;
+import com.strobel.decompiler.PlainTextOutput;
+
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 public final class ProcyonDecompiler implements DecompilerStrategy {
 
@@ -23,38 +34,34 @@ public final class ProcyonDecompiler implements DecompilerStrategy {
     }
 
     @Override
-    public DecompilationResult decompile(Path apk, Path outputDir, DecompilerConfig config)
+    public Set<String> rescue(Path jar, Path sourcesDir, Set<String> missing, DecompilerConfig config)
             throws Exception {
-        if (!Files.isRegularFile(apk)) {
-            return DecompilationResult.failure("APK no encontrado: " + apk);
-        }
-
-        Files.createDirectories(outputDir);
-        Path srcDir = outputDir.resolve("sources_procyon");
-        Files.createDirectories(srcDir);
-
-        try {
-            Class<?> decompilerClass = Class.forName("com.strobel.decompiler.Decompiler");
-            java.lang.reflect.Method decompileMethod = decompilerClass.getMethod(
-                    "decompileArchive", java.io.File.class, java.io.File.class
-            );
-
-            decompileMethod.invoke(null, apk.toFile(), srcDir.toFile());
-
-            int classesDecompiled = (int) Files.walk(srcDir)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .count();
-
-            if (classesDecompiled == 0) {
-                return DecompilationResult.failure("Procyon no generó archivos Java");
+        Files.createDirectories(sourcesDir);
+        Set<String> rescued = new LinkedHashSet<>();
+        try (JarFile jarFile = new JarFile(jar.toFile())) {
+            DecompilerSettings settings = DecompilerSettings.javaDefaults();
+            settings.setTypeLoader(new JarTypeLoader(jarFile));
+            for (String name : missing) {
+                String internal = name.replace('.', '/');
+                if (jarFile.getJarEntry(internal + ".class") == null) {
+                    continue;
+                }
+                StringWriter writer = new StringWriter();
+                try {
+                    Decompiler.decompile(internal, new PlainTextOutput(writer), settings);
+                } catch (Exception | StackOverflowError e) {
+                    continue;
+                }
+                String code = writer.toString();
+                if (code.isBlank() || code.contains("!!! ERROR: Failed to load class")) {
+                    continue;
+                }
+                Path file = sourcesDir.resolve(internal + ".java");
+                Files.createDirectories(file.getParent());
+                Files.writeString(file, code, StandardCharsets.UTF_8);
+                rescued.add(name);
             }
-
-            return DecompilationResult.success(srcDir, outputDir.resolve("resources"), 
-                    classesDecompiled, 0);
-
-        } catch (Exception e) {
-            return DecompilationResult.failure("Procyon no disponible (opcional): " + e.getMessage());
         }
+        return rescued;
     }
 }

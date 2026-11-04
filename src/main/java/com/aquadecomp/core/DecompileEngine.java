@@ -4,11 +4,16 @@ import jadx.api.JadxArgs;
 import jadx.api.JadxDecompiler;
 import jadx.api.JavaClass;
 
+import com.aquadecomp.decompilation.DecompilerChain;
+import com.aquadecomp.decompilation.DecompilerStrategy;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
@@ -87,6 +92,18 @@ public final class DecompileEngine {
             int errors = decompiler.getErrorsCount();
             int warns = decompiler.getWarnsCount();
 
+            Set<String> missing = new LinkedHashSet<>();
+            for (JavaClass jc : decompiler.getClassesWithInners()) {
+                try {
+                    String top = jc.getTopParentClass().getFullName();
+                    if (top != null && !top.isEmpty()
+                            && !Files.isRegularFile(srcDir.resolve(top.replace('.', '/') + ".java"))) {
+                        missing.add(top);
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+
             try {
                 for (JavaClass jc : decompiler.getClassesWithInners()) {
                     jc.unload();
@@ -94,6 +111,29 @@ public final class DecompileEngine {
             } catch (Exception ignored) {
             }
             System.gc();
+
+            if (!missing.isEmpty()) {
+                listener.onStage("RESCATANDO CLASES");
+                listener.onLog("JADX dejo " + missing.size()
+                        + " clases sin archivo; probando CFR, Procyon y Vineflower");
+                try {
+                    DecompilerChain chain = new DecompilerChain();
+                    DecompilerChain.ChainResult rescue = chain.rescue(apk, outDir, missing,
+                            new DecompilerStrategy.DecompilerConfig(
+                                    opts.deobfuscate(), opts.includeResources(),
+                                    opts.threads(), true),
+                            listener::onLog);
+                    if (rescue.rescuedCount() > 0) {
+                        listener.onLog("Clases rescatadas: " + rescue.rescuedCount()
+                                + "/" + missing.size() + " (" + rescue.selectedDecompiler() + ")");
+                    } else {
+                        listener.onLog("Sin rescate: " + rescue.getStatusSummary());
+                    }
+                } catch (Throwable t) {
+                    listener.onLog("Rescate no disponible: " + t.getClass().getSimpleName()
+                            + ": " + t.getMessage());
+                }
+            }
 
             listener.onProgress(92, "Contando resultados");
             int javaFiles = safeCount(srcDir, ".java");

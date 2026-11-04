@@ -7,6 +7,7 @@ import jadx.api.JavaClass;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 
 public final class JadxDecompilerWrapper implements DecompilerStrategy {
 
@@ -28,6 +29,11 @@ public final class JadxDecompilerWrapper implements DecompilerStrategy {
     }
 
     @Override
+    public Set<String> rescue(Path jar, Path sourcesDir, Set<String> missingClasses,
+                              DecompilerConfig config) {
+        return Set.of();
+    }
+
     public DecompilationResult decompile(Path apk, Path outputDir, DecompilerConfig config)
             throws Exception {
         if (!Files.isRegularFile(apk)) {

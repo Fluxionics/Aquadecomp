@@ -40,23 +40,27 @@ NormalizedInput {
 
 ### 2. Capa de Descompilación (Decompilation Layer)
 
-**Responsabilidad**: Ejecutar múltiples descompiladores en cascada hasta obtener éxito.
+**Responsabilidad**: Ejecutar JADX como motor principal y rescatar con otros motores las clases que falten.
 
 **Arquitectura**:
 
 ```
 DecompilerStrategy (Interface)
     ↓
-    ├─ JadxDecompilerWrapper
-    ├─ VineflowerDecompiler
-    ├─ CfrDecompiler
-    └─ BaksmaliDecompiler
+    ├─ JadxDecompilerWrapper   (motor principal, descompila el APK)
+    ├─ Dex2JarConverter       (convierte APK a JAR para los motores de rescate)
+    ├─ CfrDecompiler          (rescate)
+    ├─ ProcyonDecompiler      (rescate)
+    └─ VineflowerDecompiler   (rescate)
 
 DecompilerChain
-    ├─ strategies: List<DecompilerStrategy>
-    └─ decompile(): ChainResult
-        → Intenta cada estrategia secuencialmente
-        → Retorna la primera que funciona
+    ├─ primary: JadxDecompilerWrapper
+    ├─ engines: List<DecompilerStrategy>  (CFR, Procyon, Vineflower)
+    ├─ decompile(): ChainResult
+    │   → Ejecuta JADX
+    │   → Detecta clases sin archivo comparando el JAR con sources/
+    │   → Rescata solo las clases faltantes con cada motor disponible
+    └─ rescue(): ChainResult  (rescate directo de una lista de clases)
 ```
 
 **Configuración por descompilador**:
@@ -114,12 +118,12 @@ Level = ConfidenceLevel.fromScore(score)
 **Niveles de confianza**:
 
 ```
-100-90: EXCELLENT    (🟢 Excelente)
-89-75:  GOOD         (🟢 Bueno)
-74-60:  ACCEPTABLE   (🟡 Aceptable)
-59-40:  POOR         (🟠 Pobre)
-39-25:  UNRELIABLE   (🔴 No confiable)
-24-0:   SMALI_FALLBACK (⚫ Solo Smali)
+100-90: EXCELLENT    ( Excelente)
+89-75:  GOOD         ( Bueno)
+74-60:  ACCEPTABLE   ( Aceptable)
+59-40:  POOR         ( Pobre)
+39-25:  UNRELIABLE   ( No confiable)
+24-0:   SMALI_FALLBACK ( Solo Smali)
 ```
 
 ### 4. Capa de Orquestación (Orchestration Layer)
@@ -138,10 +142,9 @@ Level = ConfidenceLevel.fromScore(score)
 
 2. DESCOMPILANDO (70%)
    ├─ Ejecutar DecompilerChain
-   ├─ JADX intento 1
-   ├─ Vineflower si JADX falla
-   ├─ CFR si Vineflower falla
-   └─ Baksmali como último recurso
+   ├─ JADX intento 1 (motor principal)
+   ├─ Detectar clases sin archivo
+   └─ CFR, Procyon y Vineflower rescatan las clases faltantes
 
 3. CALCULANDO CONFIANZA (20%)
    ├─ Ejecutar ConfidenceScorer
@@ -242,7 +245,7 @@ Normalized (DEX + Resources)
     │   ├─ Decompile
     │   ├─ Save sources
     │   └─ Return success
-    └─ (Vineflower, CFR, Baksmali si JADX falla)
+    └─ (CFR, Procyon y Vineflower rescatan clases faltantes vía dex2jar)
     ↓ ConfidenceScorer
     ├─ Iterate each Java file
     ├─ Calculate score
@@ -255,18 +258,16 @@ Normalized (DEX + Resources)
 Output Directory with all artifacts
 ```
 
-### Flujo de Fallback Chain
+### Flujo de Rescate de Clases
 
 ```
-JADX intento
-├─ ¿Success? → Return
-└─ ¿Failure? → Try Vineflower
-    ├─ ¿Success? → Return
-    └─ ¿Failure? → Try CFR
-        ├─ ¿Success? → Return
-        └─ ¿Failure? → Try Baksmali
-            ├─ ¿Success? → Return (SMALI format)
-            └─ ¿Failure? → Return error
+JADX (motor principal)
+├─ ¿Generó la clase? → Conservar el archivo
+└─ ¿Falta la clase? → dex2jar convierte el APK a JAR
+    ├─ CFR intenta rescatarla
+    ├─ Procyon intenta rescatarla
+    ├─ Vineflower intenta rescatarla
+    └─ Si ningún motor la rescató → queda sin archivo (reportada)
 ```
 
 ## Concurrencia y Performance
@@ -304,11 +305,12 @@ public class MyDecompiler implements DecompilerStrategy {
     public boolean isAvailable() { ... }
     
     @Override
-    public DecompilationResult decompile(...) { ... }
+    public Set<String> rescue(Path jar, Path sourcesDir, Set<String> missing,
+                              DecompilerConfig config) { ... }
 }
 
 // 2. Registrarlo en DecompilerChain
-strategies.add(new MyDecompiler());
+engines.add(new MyDecompiler());
 ```
 
 ### Agregar nueva métrica de confianza
@@ -331,8 +333,8 @@ if (content.contains("my_custom_pattern")) {
 
 ## Limitaciones Conocidas
 
-1. **Baksmali**: Genera Smali puro, requiere post-procesamiento para ser útil
-2. **Vineflower/CFR**: Pueden no estar disponibles (dependencias opcionales)
+1. **Clases faltantes**: Si ningún motor rescata una clase, queda sin archivo en `sources/`
+2. **Vineflower/CFR/Procyon**: Pueden no estar disponibles (dependencias opcionales)
 3. **Código Nativo**: Librerías .so requieren Ghidra (futuro)
 4. **DEX Runtime**: Packers con DEX cargado dinámico no se detectan (futuro)
 5. **Renombrado**: Sin ProGuard mapping.txt, no se recuperan nombres originales

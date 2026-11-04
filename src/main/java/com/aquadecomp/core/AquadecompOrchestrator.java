@@ -77,7 +77,7 @@ public final class AquadecompOrchestrator {
                 return new OrchestrationResult(false, null, null, null, null, errorMsg, duration);
             }
 
-            listener.onLog("✓ Descompilación: " + chainResult.selectedDecompiler());
+            listener.onLog("Descompilación: " + chainResult.selectedDecompiler());
             listener.onProgress(70, "Analizando resultados");
 
             listener.onStage("CALCULANDO CONFIANZA");

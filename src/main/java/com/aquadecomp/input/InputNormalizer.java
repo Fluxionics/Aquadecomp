@@ -211,10 +211,14 @@ public final class InputNormalizer {
     }
 
     private void extractZip(Path zipFile, Path outputDir) throws IOException {
+        Path base = outputDir.toAbsolutePath().normalize();
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                Path filePath = outputDir.resolve(entry.getName());
+                Path filePath = base.resolve(entry.getName()).normalize();
+                if (!filePath.startsWith(base)) {
+                    continue;
+                }
 
                 if (entry.isDirectory()) {
                     Files.createDirectories(filePath);

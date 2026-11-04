@@ -341,9 +341,9 @@ public final class AquaGui {
         sb.append(String.format("  Archivos   : %d .java, %d líneas%n", st.javaFiles(), st.sourceLines()));
         sb.append(String.format("  Duración   : %.1f s%n", st.durationMs() / 1000.0));
         sb.append("\n──────────────── FORTALEZAS ────────────────\n");
-        for (String s : e.strengths()) sb.append("  ✔ ").append(s).append('\n');
+        for (String s : e.strengths()) sb.append("  + ").append(s).append('\n');
         sb.append("\n──────────────── LIMITACIONES ──────────────\n");
-        for (String s : e.limitations()) sb.append("  ⚠ ").append(s).append('\n');
+        for (String s : e.limitations()) sb.append("  - ").append(s).append('\n');
         sb.append("\n──────────────── METODOLOGÍA ───────────────\n");
         sb.append("  ").append(e.methodology()).append('\n');
         return sb.toString();

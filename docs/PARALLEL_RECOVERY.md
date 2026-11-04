@@ -207,12 +207,12 @@ Total:                   ~368 MB
 
 | Component | Thread-Safe | How |
 |-----------|------------|-----|
-| ParallelRecoveryPipeline | ✅ | Uses ConcurrentHashMap, AtomicInteger, synchronized List |
-| RecoveryEnginePool | ✅ | BlockingQueue<RecoveryEngineSet> |
-| RecoveryEngineSet | ✅ | Each thread gets own instance |
-| Engine (NameRecovery, etc.) | ✅ | Stateless (no shared mutable state) |
-| File I/O | ✅ | Files.readString/writeString are atomic |
-| Compilation Verifier | ✅ | Uses temp directories per file |
+| ParallelRecoveryPipeline | | Uses ConcurrentHashMap, AtomicInteger, synchronized List |
+| RecoveryEnginePool | | BlockingQueue<RecoveryEngineSet> |
+| RecoveryEngineSet | | Each thread gets own instance |
+| Engine (NameRecovery, etc.) | | Stateless (no shared mutable state) |
+| File I/O | | Files.readString/writeString are atomic |
+| Compilation Verifier | | Uses temp directories per file |
 
 ### Potential Issues & Mitigations
 
@@ -374,11 +374,11 @@ ParallelRecoveryPipeline.RecoveryResult result = pipeline.recover(sourcesDir, re
 ## Roadmap
 
 ### v0.4 (Current)
-- ✅ Parallel file processing with thread pool
-- ✅ RecoveryEnginePool with BlockingQueue
-- ✅ ConcurrentHashMap for metrics
-- ✅ Auto CPU detection
-- ✅ Custom thread count configuration
+- Parallel file processing with thread pool
+- RecoveryEnginePool with BlockingQueue
+- ConcurrentHashMap for metrics
+- Auto CPU detection
+- Custom thread count configuration
 
 ### v0.5
 - [ ] Per-engine parallelization (parallelize NameRecovery operations)

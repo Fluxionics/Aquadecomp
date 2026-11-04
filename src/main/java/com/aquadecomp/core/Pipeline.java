@@ -35,7 +35,7 @@ public final class Pipeline {
                     + " | DEX: " + structure.dexFiles().size()
                     + " | Libs nativas: " + structure.nativeLibs().size());
             if (!structure.detectedPackers().isEmpty()) {
-                listener.onLog("⚠ Packers/protectores detectados: "
+                listener.onLog("Aviso: Packers/protectores detectados: "
                         + String.join(", ", structure.detectedPackers()));
             }
             structure.warnings().forEach(listener::onLog);
@@ -50,7 +50,7 @@ public final class Pipeline {
                         + " | Actividad principal: "
                         + (manifest.mainActivity() != null ? manifest.mainActivity() : "no detectada"));
             } else {
-                listener.onLog("⚠ Manifiesto: " + manifest.parseError());
+                listener.onLog("Aviso: Manifiesto: " + manifest.parseError());
             }
 
             DecompileEngine.Options engineOpts = new DecompileEngine.Options(

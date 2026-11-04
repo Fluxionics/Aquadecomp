@@ -1,12 +1,12 @@
 # Aquadecomp - Multi-Herramienta Orquestador de Descompilación
 
-Aquadecomp es una plataforma avanzada de descompilación de aplicaciones Android que integra múltiples descompiladores en una cadena de respaldo, maximizando la cobertura y confiabilidad del código decompilado. **La v0.3 añade motores de recuperación para lograr 95%+ de efectividad en código ofuscado.**
+Aquadecomp es una plataforma de descompilación de aplicaciones Android que integra múltiples descompiladores en una cadena de respaldo, maximizando la cobertura del código decompilado, incluso en apps ofuscadas.
 
 ## Características Principales
 
-### 🚀 v0.3: Motores de Recuperación (Nuevo)
+### v0.3: Motores de Recuperación (Experimental)
 
-Aquadecomp v0.3 no solo descompila, sino que **RECUPERA** código ofuscado:
+Aquadecomp v0.3 incluye motores de recuperación de código ofuscado (paquete `recovery`):
 
 - **StringDecryptionEngine**: Recupera strings encriptados (XOR, byte arrays)
 - **NameRecoveryEngine**: Recupera nombres reales desde múltiples fuentes (ProGuard, Kotlin, recursos)
@@ -15,54 +15,48 @@ Aquadecomp v0.3 no solo descompila, sino que **RECUPERA** código ofuscado:
 - **MetadataExtractor**: Extrae metadata de Kotlin, anotaciones y genéricos
 - **RealCompilationVerifier**: Verifica con javac (compilación real, no heurística)
 
-**Resultado**: 95%+ de efectividad en recuperación de código ofuscado.
+Estos motores son experimentales y todavía no forman parte del flujo principal de descompilación.
 
-### 🔄 Cadena de Descompiladores (Fallback Strategy)
+### Cadena de Descompiladores
 
-En lugar de depender de una única herramienta, Aquadecomp intenta descompiladores en cascada:
+En lugar de depender de una única herramienta, Aquadecomp usa una cadena multi-motor:
 
-1. **JADX** - Rápido y produce código Java legible
-2. **Vineflower** - Fork mantenido de Fernflower, rescata clases donde JADX falla
-3. **Procyon** - Especializado en características modernas de Java 8+
-4. **CFR** - Excelente con lambdas, streams, records
-5. **Baksmali** - Último recurso, genera Smali puro (nunca falla)
+1. **JADX** - Motor principal, produce código Java legible directamente desde el DEX
+2. **CFR** - Rescata las clases que JADX no pudo generar
+3. **Procyon** - Segundo motor de rescate, especializado en Java moderno
+4. **Vineflower** - Tercer motor de rescate, fork mantenido de Fernflower
 
-**Resultado**: Cobertura 100%, aunque el formato varíe según disponibilidad. Cada resultado se mejora mediante recuperación.
+Los motores de rescate reciben el APK convertido a JAR con dex2jar y solo procesan las clases que faltan en `sources/`, así se mejora la cobertura sin repetir trabajo.
 
-### 📊 Sistema de Confianza Mejorado
+**Resultado**: más clases recuperadas que con JADX solo, con el motor principal manteniendo la calidad del resto del código.
 
-Cada clase decompilada recibe una puntuación de confianza basada en:
+### Informe de Efectividad
 
-- Descompilador utilizado
-- Presencia de advertencias
-- Métodos sintetizados o faltantes
-- **Capacidad de compilación con javac** (NEW en v0.3)
-- **Métricas de recuperación** (NEW en v0.3)
-- Indicadores de encriptación
+El flujo principal calcula un puntaje de efectividad 0-100 con cuatro dimensiones:
 
-**Niveles de confianza**:
-- 🟢 Excelente (90-100%)
-- 🟢 Bueno (75-89%)
-- 🟡 Aceptable (60-74%)
-- 🟠 Pobre (40-59%)
-- 🔴 No confiable (25-39%)
-- ⚫ Solo Smali (<25%)
+- **Cobertura** (40%): clases con código sobre el total
+- **Integridad** (25%): errores y advertencias de descompilación
+- **Identificadores** (25%): pérdida de nombres por ofuscación
+- **Recursos** (10%): recursos y manifiesto decodificados
 
-### 🎯 Soporte Multi-Formato
+El detalle sale en `aquedecomp-report.json` (`effectiveness`) y en el reporte Markdown.
+
+El paquete `verification` incluye además un punteo por clase con niveles (Excelente/Bueno/Aceptable/Pobre/No confiable); forma parte del orquestador experimental, ver más abajo.
+
+### Soporte Multi-Formato
 
 - **.APK** - Paquetes Android estándar
 - **.AAB** - Android App Bundles
 - **.XAPK** - Paquetes expandidos
 - **.APKS** - Splits APK
 
-### 📋 Análisis Completo
+### Análisis Completo
 
 - Inspección de manifiesto
 - Detección de protectores/packers
 - Análisis de ofuscación
-- Separación app vs librerías
-- Recuperación de nombres
-- Verificación por recompilación
+- Estadísticas de descompilación (clases, errores, líneas)
+- Informe de efectividad con metodología publicada
 
 ## Instalación
 
@@ -74,15 +68,17 @@ Cada clase decompilada recibe una puntuación de confianza basada en:
 ### Compilar desde fuente
 
 ```bash
-./gradlew build
+gradle jar
 ```
 
 El JAR se genera en `build/libs/aquedecomp.jar`
 
+También existe el wrapper (`gradlew.bat build` en Windows, `./gradlew build` en Linux/macOS).
+
 ### Ejecutable
 
 ```bash
-java -jar aquedecomp.jar [opciones] <APK_file> -o <output_dir>
+java -jar build/libs/aquedecomp.jar [opciones] <APK_file> -o <output_dir>
 ```
 
 ## Uso
@@ -96,9 +92,11 @@ java -jar aquedecomp.jar decompile signal.apk -o ./output
 java -jar aquedecomp.jar decompile signal.apk \
   -o ./output \
   --threads 8 \
-  --include-resources \
-  --deobfuscate \
-  --show-bad-code
+  --no-md \
+  --no-json
+
+# Solo inspeccionar el APK (sin descompilar)
+java -jar aquedecomp.jar inspect signal.apk
 ```
 
 ### GUI
@@ -118,10 +116,11 @@ src/main/java/com/aquadecomp/
 ├── decompilation/
 │   ├── DecompilerStrategy.java          Interfaz de estrategia
 │   ├── DecompilerChain.java             Cadena de respaldo
+│   ├── Dex2JarConverter.java            Conversión APK a JAR (dex2jar)
 │   ├── JadxDecompilerWrapper.java       JADX wrapper
-│   ├── VineflowerDecompiler.java        Vineflower wrapper
-│   ├── CfrDecompiler.java               CFR wrapper
-│   └── BaksmaliDecompiler.java          Baksmali wrapper
+│   ├── VineflowerDecompiler.java        Rescate con Vineflower
+│   ├── ProcyonDecompiler.java           Rescate con Procyon
+│   └── CfrDecompiler.java               Rescate con CFR
 ├── input/
 │   └── InputNormalizer.java             Normaliza APK/AAB/XAPK
 ├── verification/
@@ -137,7 +136,7 @@ src/main/java/com/aquadecomp/
 
 ```
 output/
-├── sources/                 Código Java/Smali decompilado
+├── sources/                 Código Java decompilado
 ├── resources/               Recursos (XML, assets, etc.)
 ├── AndroidManifest.xml     Manifiesto decodificado
 ├── aquedecomp-report.json  Reporte en formato JSON
@@ -150,43 +149,35 @@ output/
 ### Reporte JSON
 
 Contiene:
-- Metadatos del proyecto
-- Información de descompilación
-- Estadísticas completas de confianza
-- Desglose por descompilador
-- Desglose por formato
+- Estructura del APK (DEX, libs nativas, packers detectados)
+- Manifiesto (paquete, versión, permisos, actividad principal)
+- Análisis de ofuscación (ratio, nivel, señales)
+- Estadísticas de descompilación (clases, errores, líneas, duración)
+- Informe de efectividad (puntaje global y por dimensión)
 
-Ejemplo estructura:
+Ejemplo de estructura (campos reales):
 ```json
 {
-  "metadata": { ... },
-  "decompilation": { ... },
-  "statistics": {
-    "total_classes": 5432,
-    "average_score": "78.45",
-    "confidence_breakdown": {
-      "excellent": 2156,
-      "good": 1890,
-      "acceptable": 965,
-      "poor": 312,
-      "unreliable": 109,
-      "smali_only": 0
-    },
-    "compilable": {
-      "count": 4546,
-      "percentage": "83.65%"
-    }
-  }
+  "structure": { "apkPath": "...", "dexFiles": ["classes.dex"], "...": "..." },
+  "manifest": { "packageName": "...", "permissions": ["..."], "...": "..." },
+  "obfuscation": { "level": "MEDIA", "obfuscatedRatio": 0.67, "...": "..." },
+  "stats": { "classesTotal": 46528, "errors": 12, "javaFiles": 43800, "...": "..." },
+  "effectiveness": { "overallScore": 78.5, "coverageScore": 94.7, "...": "..." },
+  "success": true,
+  "toolVersion": "0.1.0-beta"
 }
 ```
+
+Ver `docs/USAGE.md` para el ejemplo completo.
 
 ### Reporte Markdown
 
 Generado para lectura humana con:
-- Resumen visual
-- Tablas de estadísticas
-- Gráficos de distribución
-- Recomendaciones de calidad
+- Efectividad global y desglose por dimensión
+- Datos de la aplicación y permisos
+- Señales de ofuscación detectadas
+- Tabla de estadísticas
+- Fortalezas, limitaciones y metodología del puntaje
 
 ## Configuración Avanzada
 
@@ -196,22 +187,22 @@ Generado para lectura humana con:
 java -jar aquedecomp.jar decompile signal.apk -o ./output --threads 16
 ```
 
-### Incluir Recursos
+### Sin Recursos
 
 ```bash
-java -jar aquedecomp.jar decompile signal.apk -o ./output --include-resources
+java -jar aquedecomp.jar decompile signal.apk -o ./output --no-resources
 ```
 
-### Mostrar Código Malo
+### Sin Desofuscación
 
 ```bash
-java -jar aquedecomp.jar decompile signal.apk -o ./output --show-bad-code
+java -jar aquedecomp.jar decompile signal.apk -o ./output --no-deobf
 ```
 
-### Desofuscación
+### Solo Resumen Final
 
 ```bash
-java -jar aquedecomp.jar decompile signal.apk -o ./output --deobfuscate
+java -jar aquedecomp.jar decompile signal.apk -o ./output --quiet
 ```
 
 ## Performance
@@ -240,28 +231,27 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 
 ## Roadmap (Fases de Desarrollo)
 
-### Fase 1: Base (✓ Completado v0.1)
-- ✓ Cadena de descompiladores (JADX → Vineflower → CFR → Baksmali)
-- ✓ Sistema de confianza por clase
-- ✓ Soporte multi-formato (APK/AAB/XAPK)
-- ✓ Reportes JSON y Markdown
+### Fase 1: Base ( Completado v0.1)
+- Cadena de descompiladores (JADX primario + rescate con CFR, Procyon y Vineflower)
+- Sistema de confianza por clase
+- Soporte multi-formato (APK/AAB/XAPK)
+- Reportes JSON y Markdown
 
-### Fase 2: Robustez (✓ Completado v0.2)
-- ✓ Agregado Procyon como descompilador 5to
-- ✓ CompilationVerifier para heurística de compilación
-- ✓ SyntheticCodeDetector para código sintético
-- ✓ Mejora de manejo de errores y tolerancia parcial
+### Fase 2: Robustez ( Completado v0.2)
+- Agregado Procyon como descompilador 5to
+- CompilationVerifier para heurística de compilación
+- SyntheticCodeDetector para código sintético
+- Mejora de manejo de errores y tolerancia parcial
 
-### Fase 3: Recuperación (✓ Completado v0.3)
-- ✓ StringDecryptionEngine - Recuperación de strings
-- ✓ NameRecoveryEngine - Recuperación de nombres desde múltiples fuentes
-- ✓ DeobfuscationEngine - Desofuscación automática
-- ✓ ClassRecoveryEngine - Recuperación de clases
-- ✓ MetadataExtractor - Preservación de metadata
-- ✓ RealCompilationVerifier - Verificación con javac real
-- ✓ RecoveryPipeline - Orquestación de recuperación
-- ✓ Integración con ConfidenceScorer
-- **Target**: 95%+ de efectividad en código ofuscado
+### Fase 3: Recuperación ( Completado v0.3)
+- StringDecryptionEngine - Recuperación de strings
+- NameRecoveryEngine - Recuperación de nombres desde múltiples fuentes
+- DeobfuscationEngine - Desofuscación automática
+- ClassRecoveryEngine - Recuperación de clases
+- MetadataExtractor - Preservación de metadata
+- RealCompilationVerifier - Verificación con javac real
+- RecoveryPipeline - Orquestación de recuperación
+- Integración con ConfidenceScorer (experimental)
 
 ### Fase 4: Optimización y Extensión (Próxima)
 - [ ] Paralelización de motores de recuperación
@@ -280,25 +270,15 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 java -Xmx6g -jar aquedecomp.jar decompile large.apk -o ./output
 ```
 
-### "No se encuentra baksmali"
-
-Baksmali es opcional. Si no está instalado, la cadena continúa con Smali.
-
-Instalar:
-```bash
-# Descargar de https://github.com/JesusFreke/smali/releases
-# O usar gestor de paquetes del SO
-```
-
 ### Clases sin descompilación
 
 - Verificar reporte JSON: `statistics.smali_only`
 - Revisar `aquedecomp-report.md` para detalles
-- Aumentar `--show-bad-code` para ver intentos fallidos
+- Revisar la fase "RESCATANDO CLASES" del log para ver qué motores actuaron
 
 ## Licencia
 
-Ver LICENSE
+Apache License 2.0. Ver el archivo `LICENSE`.
 
 ## Contribuciones
 

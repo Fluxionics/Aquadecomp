@@ -1,6 +1,7 @@
 package com.aquadecomp.decompilation;
 
 import java.nio.file.Path;
+import java.util.Set;
 
 public interface DecompilerStrategy {
 
@@ -8,7 +9,7 @@ public interface DecompilerStrategy {
 
     boolean isAvailable();
 
-    DecompilationResult decompile(Path apk, Path outputDir, DecompilerConfig config)
+    Set<String> rescue(Path jar, Path sourcesDir, Set<String> missingClasses, DecompilerConfig config)
             throws Exception;
 
     record DecompilationResult(

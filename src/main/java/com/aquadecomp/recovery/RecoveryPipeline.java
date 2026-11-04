@@ -1,5 +1,6 @@
 package com.aquadecomp.recovery;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -92,6 +93,11 @@ public final class RecoveryPipeline {
         metadataExtractor.extractMetadata(recovered, className);
 
         if (!recovered.equals(originalContent)) {
+            Path backup = file.resolveSibling(file.getFileName() + ".bak");
+            try {
+                Files.copy(file, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException ignored) {
+            }
             Files.writeString(file, recovered);
         }
 

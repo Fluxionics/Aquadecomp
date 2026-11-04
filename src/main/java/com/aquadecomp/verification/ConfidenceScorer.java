@@ -21,9 +21,6 @@ public final class ConfidenceScorer {
             return;
         }
 
-        RecoveryPipeline.RecoveryResult recoveryResult = 
-                recoveryPipeline.recover(sourcesDir, resourcesDir);
-
         try (Stream<Path> walk = Files.walk(sourcesDir)) {
             walk.filter(Files::isRegularFile)
                     .filter(p -> p.toString().endsWith(".java") || p.toString().endsWith(".smali"))

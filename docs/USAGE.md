@@ -5,11 +5,11 @@
 ### Instalación Mínima
 
 ```bash
-# Descargar JAR
-curl -O https://github.com/aquadecomp/releases/latest/aquedecomp.jar
+# Descargar JAR desde los releases del repositorio
+curl -LO https://github.com/Fluxionics/Aquadecomp/releases/latest/download/aquedecomp.jar
 
 # O compilar desde fuente
-./gradlew build
+gradle jar
 java -jar build/libs/aquedecomp.jar
 ```
 
@@ -19,11 +19,11 @@ java -jar build/libs/aquedecomp.jar
 # Comando básico
 java -jar aquedecomp.jar decompile signal.apk -o ./output
 
-# Con recursos
-java -jar aquedecomp.jar decompile signal.apk -o ./output --include-resources
+# Sin recursos (más rápido)
+java -jar aquedecomp.jar decompile signal.apk -o ./output --no-resources
 
-# Con optimizaciones
-java -jar aquedecomp.jar -Xmx6g decompile signal.apk -o ./output --threads 8
+# Con más memoria y threads
+java -Xmx6g -jar aquedecomp.jar decompile signal.apk -o ./output --threads 8
 ```
 
 ## Línea de Comandos
@@ -48,11 +48,13 @@ java -jar aquedecomp.jar decompile <archivo> -o <salida> [opciones]
 
 | Opción | Tipo | Default | Descripción |
 |--------|------|---------|-------------|
-| `-o, --output` | PATH | required | Directorio de salida |
+| `-o, --out` | PATH | `./aquadecomp-out/<nombre>` | Directorio de salida |
 | `--threads` | INT | 0 (auto) | Threads a usar |
-| `--include-resources` | BOOLEAN | false | Extraer recursos |
-| `--deobfuscate` | BOOLEAN | true | Intentar desofuscación |
-| `--show-bad-code` | BOOLEAN | true | Mostrar código problemático |
+| `--no-resources` | flag | activado | No extraer recursos (solo código) |
+| `--no-deobf` | flag | activado | No intentar desofuscación de nombres |
+| `-q, --quiet` | flag | apagado | Solo mostrar el resumen final |
+| `--no-md` | flag | apagado | No generar reporte Markdown |
+| `--no-json` | flag | apagado | No generar reporte JSON |
 | `--help` | - | - | Mostrar ayuda |
 
 **Ejemplos**:
@@ -61,24 +63,28 @@ java -jar aquedecomp.jar decompile <archivo> -o <salida> [opciones]
 # Descompilación estándar
 java -jar aquedecomp.jar decompile app.apk -o ./results
 
-# Con todos los recursos
-java -jar aquedecomp.jar decompile app.apk -o ./results --include-resources
+# Sin recursos (más rápido)
+java -jar aquedecomp.jar decompile app.apk -o ./results --no-resources
 
 # Máximo rendimiento
 java -jar aquedecomp.jar decompile app.apk -o ./results --threads 16
 
-# Mostrar incluso código malo
-java -jar aquedecomp.jar decompile app.apk -o ./results --show-bad-code
-
 # Sin desofuscación
-java -jar aquedecomp.jar decompile app.apk -o ./results --deobfuscate=false
+java -jar aquedecomp.jar decompile app.apk -o ./results --no-deobf
 
 # Combinado
 java -jar aquedecomp.jar decompile app.apk -o ./results \
     --threads 8 \
-    --include-resources \
-    --deobfuscate \
-    --show-bad-code
+    --no-md \
+    --quiet
+```
+
+#### `inspect`
+
+Solo inspecciona el APK (estructura, manifiesto, permisos, packers) sin descompilar.
+
+```bash
+java -jar aquedecomp.jar inspect app.apk
 ```
 
 #### `gui`
@@ -116,10 +122,10 @@ java -Xmx8g -XX:ParallelGCThreads=8 -jar aquedecomp.jar decompile app.apk -o ./o
 # Objetivo: Revisar el código principal rápidamente
 java -jar aquedecomp.jar decompile suspicious.apk -o ./analysis \
     --threads $(nproc) \
-    --show-bad-code
+    --no-md
 
 # Revisa:
-# 1. aquedecomp-report.md para resumen
+# 1. aquedecomp-report.json para resumen
 # 2. Clases con score EXCELLENT (90-100)
 # 3. Salta las clases POOR/UNRELIABLE
 ```
@@ -128,9 +134,8 @@ java -jar aquedecomp.jar decompile suspicious.apk -o ./analysis \
 
 ```bash
 # Objetivo: Obtener código + recursos + manifiesto
-java -jar aquedecomp.jar decompile app.apk -o ./full_decompile \
-    --include-resources \
-    --deobfuscate
+# (los recursos se extraen por defecto)
+java -jar aquedecomp.jar decompile app.apk -o ./full_decompile
 
 # Salida:
 # - sources/       → Código Java
@@ -142,11 +147,9 @@ java -jar aquedecomp.jar decompile app.apk -o ./full_decompile \
 ### Caso 3: APK Protegido o Empacado
 
 ```bash
-# Objetivo: Forzar all the tools
+# Objetivo: Forzar todos los motores
 java -Xmx12g -jar aquedecomp.jar decompile protected.apk -o ./protected_analysis \
-    --threads 16 \
-    --include-resources \
-    --show-bad-code
+    --threads 16
 
 # Lee el reporte:
 # - Verifica stats.smali_only (si es alto, protegido)
@@ -158,8 +161,7 @@ java -Xmx12g -jar aquedecomp.jar decompile protected.apk -o ./protected_analysis
 
 ```bash
 # Objetivo: Descompilación de AAB con módulos
-java -jar aquedecomp.jar decompile app.aab -o ./aab_analysis \
-    --include-resources
+java -jar aquedecomp.jar decompile app.aab -o ./aab_analysis
 
 # Nota: Se extraen todos los módulos automáticamente
 ```
@@ -168,8 +170,8 @@ java -jar aquedecomp.jar decompile app.aab -o ./aab_analysis \
 
 ```bash
 # Descompila con máximo detalle
-java -jar aquedecomp.jar decompile app_v1.apk -o ./v1_analysis --include-resources
-java -jar aquedecomp.jar decompile app_v2.apk -o ./v2_analysis --include-resources
+java -jar aquedecomp.jar decompile app_v1.apk -o ./v1_analysis
+java -jar aquedecomp.jar decompile app_v2.apk -o ./v2_analysis
 
 # Compara:
 # diff v1_analysis/sources v2_analysis/sources
@@ -189,7 +191,7 @@ output/
 │   │   │   └── utils/
 │   │   └── androidx/            # Librerías incluidas
 │   └── ...
-├── resources/                   # Recursos extraídos (si --include-resources)
+├── resources/                   # Recursos extraídos (con --no-resources no se extraen)
 │   ├── res/
 │   │   ├── layout/
 │   │   ├── values/
@@ -204,93 +206,143 @@ output/
 
 ### Reporte JSON
 
-Estructura completa:
+Estructura (serialización Gson de `PipelineResult`):
 
 ```json
 {
-  "metadata": {
-    "project_name": "signal.apk",
-    "created_at": "2024-11-02T14:32:00Z",
-    "aquadecomp_version": "0.1.0-beta",
-    "duration_ms": 45230
+  "structure": {
+    "apkPath": "C:/apk-work/app.apk",
+    "sizeBytes": 53382144,
+    "entryCount": 12873,
+    "dexFiles": ["classes.dex", "classes2.dex", "classes3.dex"],
+    "nativeLibs": ["lib/arm64-v8a/libnative.so"],
+    "assetEntries": ["assets/config.json"],
+    "detectedPackers": [],
+    "warnings": [],
+    "hasBinaryManifest": true,
+    "hasResourcesTable": true,
+    "hasMultiDex": true,
+    "hasHiddenDex": false
   },
-  "decompilation": {
-    "primary_decompiler": "JADX",
-    "attempts_made": ["JADX"],
-    "source_directory": "/output/sources",
-    "resources_directory": "/output/resources"
+  "manifest": {
+    "packageName": "com.example.app",
+    "versionName": "1.2.3",
+    "versionCode": "123",
+    "applicationClass": "com.example.app.App",
+    "debuggable": false,
+    "allowBackup": true,
+    "permissions": ["android.permission.INTERNET"],
+    "activities": ["com.example.app.MainActivity"],
+    "mainActivity": "com.example.app.MainActivity",
+    "parsedOk": true,
+    "parseError": null
   },
-  "statistics": {
-    "total_classes": 5432,
-    "average_score": "78.45",
-    "quality_label": "Muy bueno",
-    "success_ratio": "82.33%",
-    "confidence_breakdown": {
-      "excellent": 2156,
-      "good": 1890,
-      "acceptable": 965,
-      "poor": 312,
-      "unreliable": 109,
-      "smali_only": 0
-    },
-    "compilable": {
-      "count": 4546,
-      "percentage": "83.65%"
-    },
-    "decompiler_usage": {
-      "JADX": 5432
-    },
-    "format_breakdown": {
-      "JAVA": 5432,
-      "SMALI": 0
-    }
-  }
+  "obfuscation": {
+    "totalClasses": 4600,
+    "obfuscatedClasses": 3100,
+    "totalMethods": 41000,
+    "obfuscatedMethods": 35000,
+    "totalFields": 18000,
+    "obfuscatedFields": 15000,
+    "obfuscatedPackages": 12,
+    "substitutedIds": 0,
+    "obfuscatedRatio": 0.67,
+    "substitutedRatio": 0.0,
+    "level": "MEDIA",
+    "signals": ["Nombres de clases cortos (a, b, c)", "Paquetes ofuscados"],
+    "likelyStringEncryption": false
+  },
+  "stats": {
+    "classesTotal": 46528,
+    "classesWithCode": 44100,
+    "classesNoCode": 2428,
+    "errors": 12,
+    "warns": 430,
+    "javaFiles": 43800,
+    "sourceLines": 5120000,
+    "resourcesDecoded": true,
+    "manifestParsed": true,
+    "durationMs": 45230
+  },
+  "effectiveness": {
+    "overallScore": 78.5,
+    "coverageScore": 94.7,
+    "integrityScore": 88.0,
+    "identifierScore": 62.0,
+    "resourceScore": 95.0,
+    "coverageDetail": "44100/46528 clases con código",
+    "integrityDetail": "12 errores de descompilación",
+    "identifierDetail": "ofuscación MEDIA",
+    "resourceDetail": "recursos decodificados",
+    "strengths": ["Alta cobertura de clases"],
+    "limitations": ["Nombres ofuscados sin mapping.txt"],
+    "methodology": "0.40*Cobertura + 0.25*Integridad + 0.25*Identificadores + 0.10*Recursos"
+  },
+  "outputDir": "./output",
+  "success": true,
+  "errorMessage": null,
+  "toolVersion": "0.1.0-beta"
 }
 ```
 
 ### Reporte Markdown
 
-Ejemplo:
+Ejemplo (generado por `ReportWriter.markdown`):
 
 ```markdown
-# Aquadecomp - Reporte de Descompilación
+# Aquadecomp — Reporte de descompilación
 
-## Información del Proyecto
-- Nombre: signal.apk
-- Fecha: 2024-11-02 14:32:00
-- Versión Aquadecomp: 0.1.0-beta
-- Tiempo total: 45.23s
+- **Fecha:** 2026-11-04T13:05:00Z
+- **APK:** C:/apk-work/app.apk
+- **Tamaño:** 50.91 MB
+- **Versión Aquadecomp:** 0.1.0-beta
 
-## Descompilación
-- Descompilador principal: JADX
-- Intentos realizados: 1
+## Efectividad global: 78.5/100
 
-## Resultados
+| Dimensión | Puntaje | Detalle |
+|---|---:|---|
+| Cobertura | 94.7 | 44100/46528 clases con código |
+| Integridad | 88.0 | 12 errores de descompilación |
+| Identificadores | 62.0 | ofuscación MEDIA |
+| Recursos | 95.0 | recursos decodificados |
 
-### Calidad General
-- Etiqueta de calidad: Muy bueno
-- Puntuación promedio: 78.45%
-- Ratio de éxito: 82.33%
+## Aplicación
 
-### Desglose de Confianza
-| Nivel | Cantidad | Porcentaje |
-|-------|----------|-----------|
-| Excelente | 2156 | 39.71% |
-| Bueno | 1890 | 34.80% |
-| Aceptable | 965 | 17.77% |
-| Pobre | 312 | 5.74% |
-| No confiable | 109 | 2.01% |
-| Solo Smali | 0 | 0.00% |
+- **Paquete:** com.example.app
+- **Versión:** 1.2.3 (123)
+- **Actividad principal:** com.example.app.MainActivity
+- **Permisos:** 14
+  - `android.permission.INTERNET`
+- **Debuggable:** false
 
-### Compilabilidad
-- Clases compilables: 4546 (83.65%)
+## Ofuscación detectada: MEDIA
 
-### Distribución por Descompilador
-- JADX: 5432
+- Nombres de clases cortos (a, b, c)
+- Paquetes ofuscados
 
-### Formatos de Salida
-- JAVA: 5432
-- SMALI: 0
+## Estadísticas
+
+| Métrica | Valor |
+|---|---:|
+| Clases totales | 46528 |
+| Clases con código | 44100 |
+| Clases sin código | 2428 |
+| Errores / advertencias | 12 / 430 |
+| Archivos .java | 43800 |
+| Líneas de código | 5120000 |
+| Duración | 45.2 s |
+
+## Fortalezas
+
+- Alta cobertura de clases
+
+## Limitaciones
+
+- Nombres ofuscados sin mapping.txt
+
+## Metodología del puntaje
+
+0.40*Cobertura + 0.25*Integridad + 0.25*Identificadores + 0.10*Recursos
 ```
 
 ## Performance y Troubleshooting
@@ -327,9 +379,8 @@ java -Xmx2g -jar aquedecomp.jar decompile app.apk -o ./out --threads 2
 #### Sin Recursos (más rápido)
 
 ```bash
-# Solo código
-java -jar aquedecomp.jar decompile app.apk -o ./out
-# (default no incluye recursos)
+# Solo código, sin recursos
+java -jar aquedecomp.jar decompile app.apk -o ./out --no-resources
 ```
 
 ### Problemas Comunes
@@ -341,20 +392,12 @@ java -jar aquedecomp.jar decompile app.apk -o ./out
 java -Xmx8g -jar aquedecomp.jar decompile app.apk -o ./out
 ```
 
-#### "baksmali: command not found"
+#### "Clases sin rescatar" en el log
 
 ```bash
-# Baksmali es opcional - ignora el error
-# O instálalo:
-
-# En macOS
-brew install smali
-
-# En Linux
-# Descargar de https://github.com/JesusFreke/smali/releases
-
-# En Windows
-# Descargar release y agregar a PATH
+# Algunas clases no las genera ningún motor
+# Revisar el log de la fase "RESCATANDO CLASES"
+# y el reporte JSON para ver cuántas faltan
 ```
 
 #### Descompilación Muy Lenta
@@ -373,16 +416,13 @@ java -Xmx4g -jar aquedecomp.jar decompile app.apk -o ./out --threads 4
 # Probable: APK protegido o empacado
 # Soluciones:
 
-# 1. Verificar si hay código Smali (signo de protección)
-grep -c "\.smali" output/sources
-
-# 2. Verificar warnings
+# 1. Verificar warnings de JADX
 grep "JADX WARNING" output/sources/**/*.java | wc -l
 
-# 3. Usar Baksmali manualmente para bytecode puro
-baksmali d app.apk -o ./smali_output
+# 2. Revisar la fase de rescate en el log
+grep "RESCATANDO" aquedecomp.log
 
-# 4. Considerar análisis dinámico (futuro)
+# 3. Considerar análisis dinámico (futuro)
 ```
 
 ## Integración con Otras Herramientas
@@ -443,8 +483,7 @@ for apk in *.apk; do
     echo "Descompilando $apk..."
     java -jar aquedecomp.jar decompile "$apk" \
         -o "./output/${apk%.apk}" \
-        --threads 8 \
-        --include-resources
+        --threads 8
 done
 ```
 
@@ -472,7 +511,7 @@ APK="$1"
 OUTPUT="./analysis"
 
 # 1. Descompila
-java -Xmx8g -jar aquedecomp.jar decompile "$APK" -o "$OUTPUT" --include-resources
+java -Xmx8g -jar aquedecomp.jar decompile "$APK" -o "$OUTPUT"
 
 # 2. Genera reportes
 cd "$OUTPUT"

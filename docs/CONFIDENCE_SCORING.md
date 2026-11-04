@@ -239,10 +239,10 @@ Unreliable:    1%
 Smali Only:    1%
 
 Interpretación:
-✓ Código limpio, poco ofuscado
-✓ 93% del código es confiable
-✓ Seguro para análisis detallado
-✓ Adecuado para refactoring
+ Código limpio, poco ofuscado
+ 93% del código es confiable
+ Seguro para análisis detallado
+ Adecuado para refactoring
 ```
 
 ### Caso 2: Proyecto Ofuscado
@@ -257,9 +257,9 @@ Unreliable:    10%
 Smali Only:    5%
 
 Interpretación:
-⚠ Código altamente ofuscado
-⚠ Solo 65% del código es confiable
-⚠ Muchos métodos sintetizados
+ Código altamente ofuscado
+ Solo 65% del código es confiable
+ Muchos métodos sintetizados
 → Usar principalmente como referencia
 → Enfocarse en el 15% excelente
 ```
@@ -276,9 +276,9 @@ Unreliable:    20%
 Smali Only:    25%
 
 Interpretación:
-✗ Código altamente protegido/empacado
-✗ Cadena de fallback necesaria (muchas clases Smali)
-✗ Requiere análisis de bytecode
+ Código altamente protegido/empacado
+ Cadena de fallback necesaria (muchas clases Smali)
+ Requiere análisis de bytecode
 → Considerar Ghidra para código nativo
 → Considerar análisis dinámico (Frida)
 ```

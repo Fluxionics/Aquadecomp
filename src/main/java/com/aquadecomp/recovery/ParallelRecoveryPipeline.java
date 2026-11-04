@@ -21,6 +21,7 @@ public final class ParallelRecoveryPipeline {
     private final RecoveryEnginePool enginePool;
     private final CompilationCache compilationCache;
     private final PersistentCompilationCache persistentCache;
+    private final HybridCacheManager hybridCacheManager;
     private final ThreadMetricsCollector threadMetrics;
     private final List<RecoveryProgressListener> listeners = new ArrayList<>();
 
@@ -37,6 +38,12 @@ public final class ParallelRecoveryPipeline {
     }
 
     public ParallelRecoveryPipeline(int threadCount, boolean enableCache, Path cacheDir) throws IOException {
+        this(threadCount, enableCache, cacheDir, null, null, null);
+    }
+
+    public ParallelRecoveryPipeline(int threadCount, boolean enableCache, Path cacheDir,
+                                     String redisHost, Integer redisPort,
+                                     HybridCacheManager.CacheStrategy cacheStrategy) throws IOException {
         this.threadCount = Math.max(1, threadCount);
         this.enginePool = new RecoveryEnginePool(this.threadCount);
         this.compilationCache = new CompilationCache(enableCache);
@@ -47,6 +54,15 @@ public final class ParallelRecoveryPipeline {
         } else {
             this.persistentCache = null;
         }
+
+        HybridCacheManager tempHybridCache = null;
+        if (cacheStrategy != null) {
+            try {
+                tempHybridCache = new HybridCacheManager(cacheStrategy, cacheDir, redisHost, redisPort);
+            } catch (Exception ignored) {
+            }
+        }
+        this.hybridCacheManager = tempHybridCache;
     }
 
     public RecoveryResult recover(Path sourcesDir, Path resourcesDir) {
@@ -161,28 +177,42 @@ public final class ParallelRecoveryPipeline {
 
             RealCompilationVerifier.CompilationResult compilationResult = null;
 
-            try {
-                compilationResult = compilationCache.get(file);
-            } catch (IOException ignored) {
-            }
-
-            if (compilationResult == null && persistentCache != null) {
+            if (hybridCacheManager != null) {
                 try {
-                    compilationResult = persistentCache.get(file);
+                    compilationResult = hybridCacheManager.get(file);
                 } catch (IOException ignored) {
+                }
+            } else {
+                try {
+                    compilationResult = compilationCache.get(file);
+                } catch (IOException ignored) {
+                }
+
+                if (compilationResult == null && persistentCache != null) {
+                    try {
+                        compilationResult = persistentCache.get(file);
+                    } catch (IOException ignored) {
+                    }
                 }
             }
 
             if (compilationResult == null) {
                 compilationResult = engines.compilationVerifier.verify(file);
-                try {
-                    compilationCache.put(file, compilationResult);
-                } catch (IOException ignored) {
-                }
-                if (persistentCache != null) {
+                if (hybridCacheManager != null) {
                     try {
-                        persistentCache.put(file, compilationResult);
+                        hybridCacheManager.put(file, compilationResult);
                     } catch (IOException ignored) {
+                    }
+                } else {
+                    try {
+                        compilationCache.put(file, compilationResult);
+                    } catch (IOException ignored) {
+                    }
+                    if (persistentCache != null) {
+                        try {
+                            persistentCache.put(file, compilationResult);
+                        } catch (IOException ignored) {
+                        }
                     }
                 }
             }
@@ -248,6 +278,26 @@ public final class ParallelRecoveryPipeline {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    public HybridCacheManager.HybridCacheStats getHybridCacheStats() {
+        if (hybridCacheManager == null) {
+            return null;
+        }
+        try {
+            return hybridCacheManager.getStats();
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    public void closeHybridCache() {
+        if (hybridCacheManager != null) {
+            try {
+                hybridCacheManager.close();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     public void clearThreadMetrics() {

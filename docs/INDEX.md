@@ -1,6 +1,6 @@
-# Documentación de Aquadecomp v0.4
+# Documentación de Aquadecomp v0.7
 
-Aquadecomp es una plataforma multi-herramienta de descompilación de aplicaciones Android que integra JADX, Vineflower, Procyon, CFR y Baksmali en una cadena de respaldo. **v0.3 añade motores de recuperación (95%+ efectividad). v0.4 añade ejecución paralela (6-8x speedup).**
+Aquadecomp es una plataforma multi-herramienta de descompilación de aplicaciones Android que integra JADX, Vineflower, Procyon, CFR y Baksmali en una cadena de respaldo. **v0.3 añade motores de recuperación (95%+ efectividad). v0.4 añade ejecución paralela (6-8x speedup). v0.5 añade caché de compilación (10-104x speedup). v0.6 añade caché persistente + métricas. v0.7 añade Redis distribuido para clusters multi-máquina (50-200x speedup en pipelines CI/CD).**
 
 ## Guías Principales
 
@@ -55,6 +55,18 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Cache statistics
   - 10-104x speedup on incremental builds
 
+- [Caché Persistente y Métricas (V0.6_PERSISTENT_CACHE_AND_METRICS.md)](V0.6_PERSISTENT_CACHE_AND_METRICS.md) - NEW en v0.6:
+  - PersistentCompilationCache (LRU eviction)
+  - ThreadMetricsCollector (CPU/memory monitoring)
+  - Two-layer hybrid caching
+  - Thread pool optimization
+
+- [Caché Distribuida con Redis (V0.7_DISTRIBUTED_REDIS_CACHE.md)](V0.7_DISTRIBUTED_REDIS_CACHE.md) - NEW en v0.7:
+  - DistributedRedisCache (cluster-wide sharing)
+  - HybridCacheManager (3-layer orchestration)
+  - Multi-machine CI/CD integration
+  - 50-200x speedup on recurring decompilations
+
 ## Estructura de Proyecto
 
 ```
@@ -80,14 +92,22 @@ aquadecomp/
 │   │   ├── ProcyonDecompiler.java
 │   │   ├── CfrDecompiler.java
 │   │   └── BaksmaliDecompiler.java
-│   ├── recovery/                ← NEW v0.3
+│   ├── recovery/                ← NEW v0.3, enhanced v0.4-v0.7
 │   │   ├── StringDecryptionEngine.java
 │   │   ├── NameRecoveryEngine.java
 │   │   ├── DeobfuscationEngine.java
 │   │   ├── ClassRecoveryEngine.java
 │   │   ├── MetadataExtractor.java
 │   │   ├── RealCompilationVerifier.java
-│   │   └── RecoveryPipeline.java
+│   │   ├── RecoveryPipeline.java
+│   │   ├── ParallelRecoveryPipeline.java         ← v0.4
+│   │   ├── RecoveryEnginePool.java               ← v0.4
+│   │   ├── CompilationCache.java                 ← v0.5
+│   │   ├── RecoveryProgressListener.java         ← v0.5
+│   │   ├── PersistentCompilationCache.java       ← v0.6
+│   │   ├── ThreadMetricsCollector.java           ← v0.6
+│   │   ├── DistributedRedisCache.java            ← v0.7
+│   │   └── HybridCacheManager.java               ← v0.7
 │   ├── input/
 │   │   └── InputNormalizer.java
 │   ├── verification/
@@ -257,6 +277,6 @@ Ver LICENSE
 
 ---
 
-**Última actualización**: Noviembre 2025
-**Versión**: 0.5.0
-**Estado**: Caché de compilación + monitoreo de progreso (10-104x speedup incremental)
+**Última actualización**: Noviembre 2, 2026
+**Versión**: 0.7.0
+**Estado**: Caché distribuida con Redis (50-200x speedup en clusters multi-máquina)

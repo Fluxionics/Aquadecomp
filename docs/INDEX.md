@@ -49,6 +49,12 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Configuración de threads
   - Benchmarks y escalabilidad
 
+- [Caché y Monitoreo (V0.5_COMPILATION_CACHE_AND_PROGRESS.md)](V0.5_COMPILATION_CACHE_AND_PROGRESS.md) - NEW en v0.5:
+  - CompilationCache (SHA-256 based)
+  - RecoveryProgressListener (event callbacks)
+  - Cache statistics
+  - 10-104x speedup on incremental builds
+
 ## Estructura de Proyecto
 
 ```
@@ -252,5 +258,5 @@ Ver LICENSE
 ---
 
 **Última actualización**: Noviembre 2025
-**Versión**: 0.4.0
-**Estado**: Parallelización completa - 6-8x faster recovery execution
+**Versión**: 0.5.0
+**Estado**: Caché de compilación + monitoreo de progreso (10-104x speedup incremental)

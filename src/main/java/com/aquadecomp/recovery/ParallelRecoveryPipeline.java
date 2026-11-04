@@ -20,20 +20,33 @@ public final class ParallelRecoveryPipeline {
     private final Map<String, RecoveryMetrics> metrics = new ConcurrentHashMap<>();
     private final RecoveryEnginePool enginePool;
     private final CompilationCache compilationCache;
+    private final PersistentCompilationCache persistentCache;
+    private final ThreadMetricsCollector threadMetrics;
     private final List<RecoveryProgressListener> listeners = new ArrayList<>();
 
-    public ParallelRecoveryPipeline() {
+    public ParallelRecoveryPipeline() throws IOException {
         this(Runtime.getRuntime().availableProcessors());
     }
 
-    public ParallelRecoveryPipeline(int threadCount) {
-        this(threadCount, true);
+    public ParallelRecoveryPipeline(int threadCount) throws IOException {
+        this(threadCount, true, null);
     }
 
-    public ParallelRecoveryPipeline(int threadCount, boolean enableCache) {
+    public ParallelRecoveryPipeline(int threadCount, boolean enableCache) throws IOException {
+        this(threadCount, enableCache, null);
+    }
+
+    public ParallelRecoveryPipeline(int threadCount, boolean enableCache, Path cacheDir) throws IOException {
         this.threadCount = Math.max(1, threadCount);
         this.enginePool = new RecoveryEnginePool(this.threadCount);
         this.compilationCache = new CompilationCache(enableCache);
+        this.threadMetrics = new ThreadMetricsCollector();
+
+        if (cacheDir != null && enableCache) {
+            this.persistentCache = new PersistentCompilationCache(cacheDir);
+        } else {
+            this.persistentCache = null;
+        }
     }
 
     public RecoveryResult recover(Path sourcesDir, Path resourcesDir) {
@@ -153,11 +166,24 @@ public final class ParallelRecoveryPipeline {
             } catch (IOException ignored) {
             }
 
+            if (compilationResult == null && persistentCache != null) {
+                try {
+                    compilationResult = persistentCache.get(file);
+                } catch (IOException ignored) {
+                }
+            }
+
             if (compilationResult == null) {
                 compilationResult = engines.compilationVerifier.verify(file);
                 try {
                     compilationCache.put(file, compilationResult);
                 } catch (IOException ignored) {
+                }
+                if (persistentCache != null) {
+                    try {
+                        persistentCache.put(file, compilationResult);
+                    } catch (IOException ignored) {
+                    }
                 }
             }
 
@@ -205,6 +231,27 @@ public final class ParallelRecoveryPipeline {
 
     public void clearCache() {
         compilationCache.clear();
+        if (persistentCache != null) {
+            try {
+                persistentCache.clear();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    public PersistentCompilationCache.CacheStats getPersistentCacheStats() {
+        if (persistentCache == null) {
+            return null;
+        }
+        try {
+            return persistentCache.getStats();
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    public void clearThreadMetrics() {
+        threadMetrics.clear();
     }
 
     private void notifyRecoveryStart(int totalFiles) {

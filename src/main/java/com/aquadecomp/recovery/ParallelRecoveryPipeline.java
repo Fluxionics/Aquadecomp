@@ -1,5 +1,6 @@
 package com.aquadecomp.recovery;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -18,14 +19,21 @@ public final class ParallelRecoveryPipeline {
     private final int threadCount;
     private final Map<String, RecoveryMetrics> metrics = new ConcurrentHashMap<>();
     private final RecoveryEnginePool enginePool;
+    private final CompilationCache compilationCache;
+    private final List<RecoveryProgressListener> listeners = new ArrayList<>();
 
     public ParallelRecoveryPipeline() {
         this(Runtime.getRuntime().availableProcessors());
     }
 
     public ParallelRecoveryPipeline(int threadCount) {
+        this(threadCount, true);
+    }
+
+    public ParallelRecoveryPipeline(int threadCount, boolean enableCache) {
         this.threadCount = Math.max(1, threadCount);
         this.enginePool = new RecoveryEnginePool(this.threadCount);
+        this.compilationCache = new CompilationCache(enableCache);
     }
 
     public RecoveryResult recover(Path sourcesDir, Path resourcesDir) {
@@ -46,15 +54,22 @@ public final class ParallelRecoveryPipeline {
             return new RecoveryResult(false, 0, new ArrayList<>(), new HashMap<>());
         }
 
+        notifyRecoveryStart(filesToProcess.size());
+
         AtomicInteger filesRecovered = new AtomicInteger(0);
         List<String> recoveredItems = Collections.synchronizedList(new ArrayList<>());
         Map<String, RecoveryMetrics> fileMetrics = new ConcurrentHashMap<>();
 
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
+        final int[] fileCounter = {1};
         for (Path file : filesToProcess) {
+            int fileNumber = fileCounter[0]++;
             executor.submit(() -> {
                 try {
+                    long startTime = System.currentTimeMillis();
+                    notifyFileStart(file, fileNumber, filesToProcess.size());
+
                     RecoveryMetrics result = recoverFile(file, resourcesDir);
                     fileMetrics.put(file.toString(), result);
                     metrics.put(file.toString(), result);
@@ -63,7 +78,18 @@ public final class ParallelRecoveryPipeline {
                         filesRecovered.incrementAndGet();
                         recoveredItems.addAll(result.recoveredItems());
                     }
-                } catch (Exception ignored) {
+
+                    long elapsedMs = System.currentTimeMillis() - startTime;
+                    RecoveryProgressListener.RecoveryResult progressResult =
+                            new RecoveryProgressListener.RecoveryResult(
+                                    result.compilationScore(),
+                                    result.wasRecovered(),
+                                    result.isValid(),
+                                    elapsedMs
+                            );
+                    notifyFileComplete(file, fileNumber, filesToProcess.size(), progressResult);
+                } catch (Exception e) {
+                    notifyError(file, e.getMessage());
                 }
             });
         }
@@ -78,6 +104,8 @@ public final class ParallelRecoveryPipeline {
         double recoveryRate = filesToProcess.size() > 0 ?
                 (filesRecovered.get() * 100.0) / filesToProcess.size() : 0;
         boolean success = recoveryRate >= 95.0;
+
+        notifyRecoveryComplete(filesToProcess.size(), filesRecovered.get(), recoveryRate);
 
         return new RecoveryResult(success, recoveryRate, recoveredItems, fileMetrics);
     }
@@ -118,11 +146,25 @@ public final class ParallelRecoveryPipeline {
                 Files.writeString(file, recovered);
             }
 
-            RealCompilationVerifier.CompilationResult compilationResult =
-                    engines.compilationVerifier.verify(file);
+            RealCompilationVerifier.CompilationResult compilationResult = null;
+
+            try {
+                compilationResult = compilationCache.get(file);
+            } catch (IOException ignored) {
+            }
+
+            if (compilationResult == null) {
+                compilationResult = engines.compilationVerifier.verify(file);
+                try {
+                    compilationCache.put(file, compilationResult);
+                } catch (IOException ignored) {
+                }
+            }
 
             int score = compilationResult.score();
             boolean isValid = compilationResult.isSuccess();
+
+            notifyCompilationComplete(file, score, isValid);
 
             return new RecoveryMetrics(
                     file.toString(),
@@ -147,6 +189,77 @@ public final class ParallelRecoveryPipeline {
 
     public int getThreadCount() {
         return threadCount;
+    }
+
+    public void addProgressListener(RecoveryProgressListener listener) {
+        listeners.add(listener);
+    }
+
+    public void removeProgressListener(RecoveryProgressListener listener) {
+        listeners.remove(listener);
+    }
+
+    public CompilationCache.CacheStats getCacheStats() {
+        return compilationCache.getStats();
+    }
+
+    public void clearCache() {
+        compilationCache.clear();
+    }
+
+    private void notifyRecoveryStart(int totalFiles) {
+        for (RecoveryProgressListener listener : listeners) {
+            try {
+                listener.onRecoveryStart(totalFiles, threadCount);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void notifyFileStart(Path file, int fileNumber, int totalFiles) {
+        for (RecoveryProgressListener listener : listeners) {
+            try {
+                listener.onFileStart(file, fileNumber, totalFiles);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void notifyCompilationComplete(Path file, int score, boolean success) {
+        for (RecoveryProgressListener listener : listeners) {
+            try {
+                listener.onCompilationComplete(file, score, success);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void notifyFileComplete(Path file, int fileNumber, int totalFiles,
+                                    RecoveryProgressListener.RecoveryResult result) {
+        for (RecoveryProgressListener listener : listeners) {
+            try {
+                listener.onFileComplete(file, fileNumber, totalFiles, result);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void notifyRecoveryComplete(int totalFiles, int filesRecovered, double recoveryRate) {
+        for (RecoveryProgressListener listener : listeners) {
+            try {
+                listener.onRecoveryComplete(totalFiles, filesRecovered, recoveryRate);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void notifyError(Path file, String errorMessage) {
+        for (RecoveryProgressListener listener : listeners) {
+            try {
+                listener.onError(file, errorMessage);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     public static final class RecoveryResult {

@@ -82,7 +82,7 @@ public final class Pipeline {
 
             if (!manifest.parsedOk()) {
                 ManifestInfo decoded = DecodedManifestReader.read(
-                        out.resolve("resources").resolve("AndroidManifest.xml"));
+                        DecodedManifestReader.find(out.resolve("resources")));
                 if (decoded.parsedOk()) {
                     manifest = decoded;
                     listener.onLog("Manifiesto leído del XML decodificado: paquete "

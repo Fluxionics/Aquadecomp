@@ -61,6 +61,38 @@ class DecodedManifestReaderTest {
     }
 
     @Test
+    void findLocatesNestedManifestInBundleLayout() throws IOException {
+        Path nested = tmp.resolve("resources/base/manifest/AndroidManifest.xml");
+        Files.createDirectories(nested.getParent());
+        Files.writeString(nested, "<manifest package=\"com.example.app\"/>");
+
+        Path found = DecodedManifestReader.find(tmp.resolve("resources"));
+
+        assertEquals(nested, found);
+        assertTrue(DecodedManifestReader.read(found).parsedOk());
+    }
+
+    @Test
+    void findPrefersTheShallowestManifest() throws IOException {
+        Path shallow = tmp.resolve("resources/AndroidManifest.xml");
+        Path deep = tmp.resolve("resources/base/manifest/AndroidManifest.xml");
+        Files.createDirectories(deep.getParent());
+        Files.writeString(shallow, "<manifest package=\"com.example.shallow\"/>");
+        Files.writeString(deep, "<manifest package=\"com.example.deep\"/>");
+
+        assertEquals(shallow, DecodedManifestReader.find(tmp.resolve("resources")));
+    }
+
+    @Test
+    void findReturnsTheExpectedPathWhenNothingExists() {
+        Path resources = tmp.resolve("resources");
+
+        assertEquals(resources.resolve("AndroidManifest.xml"),
+                DecodedManifestReader.find(resources));
+        assertFalse(Files.exists(DecodedManifestReader.find(resources)));
+    }
+
+    @Test
     void missingFileFailsCleanly() {
         ManifestInfo m = DecodedManifestReader.read(tmp.resolve("no-existe.xml"));
 

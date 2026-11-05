@@ -251,23 +251,31 @@ java -jar aquedecomp.jar decompile signal.apk -o ./output --quiet
 
 ## Performance
 
-### Estimaciones de Tiempo
+### Tiempos medidos
 
-| Tamaño APK | Tiempo (1 thread) | Tiempo (8 threads) |
-|------------|-------------------|-------------------|
-| 5 MB      | 10-15s            | 5-8s               |
-| 50 MB     | 1-2m              | 20-40s             |
-| 150+ MB   | 5-10m             | 1-2m               |
+Tiempos totales de las siete etapas (incluida la puntuación de confianza de
+cada archivo) medidos en una máquina de escritorio con Java 21 y Gradle 9,
+usando `java -jar aquedecomp.jar decompile <apk> -o <salida>`:
+
+| APK                          | Tamaño  | Tiempo total |
+|------------------------------|---------|--------------|
+| smsscheduler.apk             | 50 KB   | 89 s         |
+| mini.apk                     | 4.6 MB  | 465 s        |
+| signal.apk                   | 109.7 MB| 1307 s       |
+
+El tiempo lo dominan la descompilación con JADX y el análisis de confianza,
+no la lectura del ZIP. Para reprocir estas medidas y las de los cuatro
+formatos, ver [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ### Consumo de Memoria
 
 - Base: ~500 MB
-- +200-400 MB por cada 10MB de APK
-- Pico durante decompilación: 2-3x del tamaño del APK
+- Observado en corridas de apps medianas (4.6 MB): ~750 MB de conjunto de trabajo
+- APKs grandes: reservar más heap (ver abajo)
 
 ### Optimizaciones
 
-Para APKs grandes (>150MB):
+Para APKs grandes (>100MB):
 
 ```bash
 java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8

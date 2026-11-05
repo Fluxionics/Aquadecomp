@@ -6,16 +6,36 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 public final class DecodedManifestReader {
 
     private static final String ANDROID_NS = "android:name";
 
     private DecodedManifestReader() {
+    }
+
+    public static Path find(Path resourcesDir) {
+        Path direct = resourcesDir.resolve("AndroidManifest.xml");
+        if (Files.isRegularFile(direct)) {
+            return direct;
+        }
+        if (!Files.isDirectory(resourcesDir)) {
+            return direct;
+        }
+        try (Stream<Path> walk = Files.walk(resourcesDir)) {
+            return walk.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().equals("AndroidManifest.xml"))
+                    .min((a, b) -> Integer.compare(a.getNameCount(), b.getNameCount()))
+                    .orElse(direct);
+        } catch (IOException e) {
+            return direct;
+        }
     }
 
     public static ManifestInfo read(Path xmlFile) {

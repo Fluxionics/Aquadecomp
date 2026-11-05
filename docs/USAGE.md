@@ -99,6 +99,10 @@ Solo inspecciona el APK (estructura, manifiesto, permisos, packers) sin descompi
 java -jar aquedecomp.jar inspect app.apk
 ```
 
+También acepta los cuatro formatos: en XAPK y APKS inspecciona el APK interno
+extraído y lo indica en la salida (`Formato: XAPK (analizado sobre su APK
+interno)`).
+
 #### `gui`
 
 Inicia la interfaz gráfica.
@@ -217,7 +221,7 @@ output/
 
 ### Reporte JSON
 
-Estructura (serialización Gson de `PipelineResult`):
+Estructura (serialización Gson de `PipelineResult`), con valores ilustrativos:
 
 ```json
 {
@@ -324,7 +328,7 @@ Estructura (serialización Gson de `PipelineResult`):
 
 ### Reporte Markdown
 
-Ejemplo (generado por `ReportWriter.markdown`):
+Ejemplo de estructura (valores ilustrativos; lo real depende del APK):
 
 ```markdown
 # Aquadecomp — Reporte de descompilación

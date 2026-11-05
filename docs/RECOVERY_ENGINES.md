@@ -41,7 +41,7 @@ Orquestado por `RecoveryPipeline`, que recibe el directorio `sources/` y un `Pip
 - El mapa de cadenas es local a cada llamada: no hay estado entre archivos
 - Los `byte[]` sueltos (sin envolver en `new String(...)`) nunca se tocan
 
-**Verificado con pruebas manuales**: cadenas, Base64, XOR y bytes no imprimibles se comportan como se describe.
+**Verificado con pruebas automatizadas** (`StringDecryptionEngineTest` en `gradle test`): cadenas, Base64, XOR y bytes no imprimibles se comportan como se describe.
 
 ### 2. ClassRecoveryEngine
 

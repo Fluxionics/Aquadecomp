@@ -190,14 +190,17 @@ output/
 
 ## Performance
 
+Tiempos totales medidos con el flujo completo (las siete etapas):
+
 | APK Size | Tiempo |
 |----------|--------|
-| 5 MB | ~5-10s |
-| 50 MB | ~30-60s |
-| 150 MB | ~2-3 min |
-| 300+ MB | ~5+ min |
+| 50 KB | ~89 s |
+| 4.6 MB | ~465 s |
+| 110 MB | ~1307 s (≈22 min) |
 
-**Con 8 threads**: 2-4x más rápido
+Las apps con decenas de miles de clases pasan la mayor parte de ese tiempo en
+descompilación y en la puntuación de confianza. Con `--threads 8` la
+descompilación se acelera; el total varía según la máquina.
 
 ---
 
@@ -240,19 +243,20 @@ Para más detalles:
 ## Ejemplo Real
 
 ```bash
-# Descompilación
-java -Xmx6g -jar build/libs/aquedecomp.jar decompile telegram.apk \
-    -o ./telegram_analysis \
-    --threads 8
+# Descompilación (medida en esta máquina)
+java -jar build/libs/aquedecomp.jar decompile mini.apk \
+    -o ./mini_analysis
 
-# Resultado: 45 segundos
+# Resultado: 465 segundos, 6425 archivos .java
+# Efectividad global: 91.8/100
+# Motor por archivo: JADX 6360, CFR 63, Procyon 2
 
 # Ver reporte
-cat telegram_analysis/aquedecomp-report.md
+cat mini_analysis/aquedecomp-report.md
 
-# Resultado (sección Confianza por clase):
-# Puntaje medio: 81.2/100
-# Fiables (excelente + bueno + aceptable): 88.4%
+# Resumen (sección Confianza por clase):
+# Puntaje medio: 68.0/100
+# Fiables (excelente + bueno + aceptable): 81.0%
 ```
 
 ---

@@ -12,24 +12,14 @@ public final class ClassRecoveryEngine {
     private static final Pattern CLASS_DEF = Pattern.compile(
             "class\\s+([a-zA-Z0-9$_]+)\\s*(?:extends|implements|\\{)"
     );
-    private static final Pattern INTERFACE_DEF = Pattern.compile(
-            "interface\\s+([a-zA-Z0-9$_]+)"
-    );
-    private static final Pattern ENUM_DEF = Pattern.compile(
-            "enum\\s+([a-zA-Z0-9$_]+)"
-    );
 
-    public String recoverClasses(String source) {
-        String result = source;
-
-        result = recoverInnerClasses(result);
-        result = recoverAnonymousClasses(result);
-        result = recoverMissingClasses(result);
-
-        return result;
+    public void analyze(String source) {
+        analyzeInnerClasses(source);
+        analyzeAnonymousClasses(source);
+        analyzeEmptyClasses(source);
     }
 
-    private String recoverInnerClasses(String source) {
+    private void analyzeInnerClasses(String source) {
         java.util.regex.Matcher matcher = CLASS_DEF.matcher(source);
 
         while (matcher.find()) {
@@ -39,7 +29,6 @@ public final class ClassRecoveryEngine {
                 if (className.contains("$")) {
                     String[] parts = className.split("\\$");
                     String outerClass = parts[0];
-                    String innerClass = parts[parts.length - 1];
 
                     ClassInfo info = new ClassInfo(className, true, outerClass);
                     recoveredClasses.put(className, info);
@@ -47,11 +36,9 @@ public final class ClassRecoveryEngine {
             } catch (Exception ignored) {
             }
         }
-
-        return source;
     }
 
-    private String recoverAnonymousClasses(String source) {
+    private void analyzeAnonymousClasses(String source) {
         Pattern anonPattern = Pattern.compile(
                 "new\\s+([a-zA-Z0-9$_]+)\\s*\\(\\s*\\)\\s*\\{|" +
                 "new\\s+([a-zA-Z0-9.]+)\\s*\\(\\s*\\)\\s*\\{"
@@ -72,11 +59,9 @@ public final class ClassRecoveryEngine {
             } catch (Exception ignored) {
             }
         }
-
-        return source;
     }
 
-    private String recoverMissingClasses(String source) {
+    private void analyzeEmptyClasses(String source) {
         Pattern missingPattern = Pattern.compile(
                 "class\\s+([a-zA-Z0-9$_]+)\\s+\\{\\s*\\}"
         );
@@ -93,8 +78,6 @@ public final class ClassRecoveryEngine {
             } catch (Exception ignored) {
             }
         }
-
-        return source;
     }
 
     private boolean shouldExpandClass(String className, String source) {

@@ -49,7 +49,7 @@ java -Xmx8g -jar build/libs/aquedecomp.jar decompile signal.apk \
 - `-Xmx8g` = 8GB de memoria (importante para APKs grandes)
 - `--threads 8` = Usar 8 threads (más rápido)
 - `--no-resources` = No extraer recursos (solo código, más rápido)
-- `--no-deobf` = No intentar desofuscación
+- `--no-deobf` = Desactivar el renombrado de nombres de JADX
 - `--quiet` = Solo el resumen final
 
 ### 3. **Interfaz Gráfica**
@@ -86,6 +86,18 @@ java -jar build/libs/aquedecomp.jar gui
     "level": "MEDIA",
     "obfuscatedRatio": 0.67
   },
+  "inputType": "APK",
+  "confidence": {
+    "total": 6425,
+    "averageScore": 68.0,
+    "structurallyValid": 6146
+  },
+  "recovery": {
+    "filesProcessed": 6425,
+    "filesModified": 0,
+    "javacSampled": 40,
+    "javacCompiled": 16
+  },
   "success": true
 }
 ```
@@ -94,6 +106,8 @@ java -jar build/libs/aquedecomp.jar gui
 - `overallScore` > 80 = Bueno
 - `coverageScore` > 90 = Buena cobertura de clases
 - `obfuscation.level` alto = probablemente protegido
+- `confidence.averageScore` = confianza media por clase
+- `recovery` = qué hizo la etapa de recuperación
 
 ### Reporte Markdown
 
@@ -112,9 +126,9 @@ java -jar build/libs/aquedecomp.jar gui
 
 ---
 
-## Niveles de Confianza (experimental)
+## Niveles de Confianza
 
-El paquete `verification` puntúa cada clase individualmente (aún no forma parte del flujo principal):
+El paquete `verification` puntúa cada clase individualmente; la etapa "PUNTUANDO CONFIANZA" la ejecuta en cada descompilación:
 
 | Nivel | Rango | Significado |
 |-------|-------|-------------|
@@ -122,8 +136,7 @@ El paquete `verification` puntúa cada clase individualmente (aún no forma part
 | Bueno | 75-89 | Muy bueno, confiable |
 | Aceptable | 60-74 | Útil como referencia |
 | Pobre | 40-59 | Problemático |
-| No confiable | 25-39 | NO usar |
-| Solo Smali | 0-24 | Bytecode sin traducción |
+| No confiable | 0-39 | NO usar |
 
 ---
 
@@ -235,10 +248,9 @@ java -Xmx6g -jar build/libs/aquedecomp.jar decompile telegram.apk \
 # Ver reporte
 cat telegram_analysis/aquedecomp-report.md
 
-# Resultado:
-# Average Score: 81.23%
-# Excellent: 38% (confiable)
-# Compilable: 86.5%
+# Resultado (sección Confianza por clase):
+# Puntaje medio: 81.2/100
+# Fiables (excelente + bueno + aceptable): 88.4%
 ```
 
 ---
@@ -307,12 +319,12 @@ java -Xmx8g -jar build/libs/aquedecomp.jar decompile app.apk -o ./out \
 
 - `// JADX WARNING` (-15 puntos)
 - `throw new UnsupportedOperationException` (-20 puntos)
-- `// TODO` o `/* synthetic */` (-10 puntos)
-- Errores de compilación (-20 puntos por tipo)
+- `// TODO` o `/* FIXME */` (-5 puntos)
+- `/* missing */` o `/* synthetic */` (-10 puntos)
+- Patrones de error de compilación en el texto (-5 a -20)
 
 **Base**:
-- Código Java: 75 puntos base
-- Código Smali: 10 puntos base
+- 75 puntos para todas las clases
 
 ---
 

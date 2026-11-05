@@ -8,16 +8,16 @@ Aquadecomp implementa una arquitectura modular de múltiples capas que integra d
 
 ### 1. Capa de Entrada (Input Layer)
 
-**Responsabilidad**: Normalizar diversos formatos de entrada (APK, AAB, XAPK, APKS) a una representación uniforme.
+**Responsabilidad**: Validar y clasificar el formato de entrada (APK, AAB, XAPK, APKS) antes de pasarlo al motor.
 
 **Componentes**:
-- `InputNormalizer`: Detecta tipo de entrada y extrae DEX + recursos
-- `InputInspector`: Analiza estructura, detecta packers, librerías nativas
+- `InputNormalizer`: Detecta tipo de entrada, valida el ZIP y cuenta los DEX
+- `ApkInspector`: Analiza estructura, detecta packers, librerías nativas y lee el manifiesto
 
 **Formatos soportados**:
 ```
 APK (.apk)     → ZIP con classes.dex, resources
-AAB (.aab)     → Bundle con múltiples DEX en módulos
+AAB (.aab)     → Android App Bundle (JADX lo lee directamente)
 XAPK (.xapk)   → ZIP con APKs + OBB
 APKS (.apks)   → ZIP con splits APK
 ```
@@ -28,13 +28,12 @@ Input File
     ↓
 InputNormalizer.detectType()
     ↓
-normalize() → normalizeApk() / normalizeAab() / etc.
+normalize() → valida magic ZIP, detecta tipo, cuenta DEX
     ↓
 NormalizedInput {
-    - dexFiles: List<Path>
-    - manifestPath: Path
-    - resourcesDir: Path
-    - tempDirectory: Path
+    - type: InputType
+    - file: Path
+    - dexEntries: int
 }
 ```
 
@@ -101,8 +100,7 @@ DecompilationResult {
 
 ```
 Base Score:
-    - JAVA: 75
-    - SMALI: 10
+    - base: 75
 
 Ajustes:
     - JADX WARNING: -15
@@ -122,48 +120,56 @@ Level = ConfidenceLevel.fromScore(score)
 89-75:  GOOD         ( Bueno)
 74-60:  ACCEPTABLE   ( Aceptable)
 59-40:  POOR         ( Pobre)
-39-25:  UNRELIABLE   ( No confiable)
-24-0:   SMALI_FALLBACK ( Solo Smali)
+0-39:   UNRELIABLE   ( No confiable)
 ```
 
 ### 4. Capa de Orquestación (Orchestration Layer)
 
 **Responsabilidad**: Coordinar todo el flujo de descompilación.
 
-**Componente principal**: `AquadecompOrchestrator`
+**Componente principal**: `Pipeline`
 
 **Flujo de orquestación**:
 
 ```
-1. NORMALIZANDO ENTRADA (10%)
-   ├─ Detectar formato
-   ├─ Extraer DEX + recursos
-   └─ Guardar en temporal
+1. NORMALIZANDO ENTRADA (1%)
+   └─ Detectar y validar formato (APK/AAB/XAPK/APKS)
 
-2. DESCOMPILANDO (70%)
+2. INSPECCIONANDO APK (2%)
+   └─ Estructura ZIP, DEX, libs nativas, packers
+
+3. DECODIFICANDO MANIFIESTO (6%)
+   └─ Paquete, versión, permisos, actividad principal
+
+4. DESCOMPILANDO (5..97%)
    ├─ Ejecutar DecompilerChain
    ├─ JADX intento 1 (motor principal)
    ├─ Detectar clases sin archivo
    └─ CFR, Procyon y Vineflower rescatan las clases faltantes
 
-3. CALCULANDO CONFIANZA (20%)
+5. RECUPERANDO CÓDIGO (97%)
+   └─ RecoveryPipeline: cadenas, clases, metadatos, muestra javac
+
+6. PUNTUANDO CONFIANZA (98%)
    ├─ Ejecutar ConfidenceScorer
    ├─ Generar ConfidenceMap
    └─ Agregar estadísticas
 
-4. Retornar OrchestrationResult
+7. CALCULANDO EFECTIVIDAD (99%)
+   └─ EffectivenessCalculator + reportes
+
+8. Retornar PipelineResult
 ```
 
 **Opciones de orquestación**:
 
 ```java
 Options {
-    - inputFile: Path
+    - apk: Path
     - outputDir: Path
     - deobfuscate: boolean
     - includeResources: boolean
     - threads: int
-    - showBadCode: boolean
 }
 ```
 
@@ -173,30 +179,32 @@ Options {
 
 **Componentes**:
 
-- `ComprehensiveReportGenerator`: Genera JSON + Markdown
+- `ReportWriter`: Genera JSON + Markdown desde `PipelineResult`
 
 **Formatos**:
 
 #### JSON Report
 ```json
 {
-  "metadata": { project_name, created_at, aquadecomp_version, duration_ms },
-  "decompilation": { primary_decompiler, attempts_made, source_directory },
-  "statistics": {
-    "total_classes": number,
-    "average_score": number,
-    "confidence_breakdown": { excellent, good, acceptable, poor, unreliable, smali_only },
-    "compilable": { count, percentage },
-    "decompiler_usage": { JADX: count, ... },
-    "format_breakdown": { JAVA: count, SMALI: count }
-  }
+  "structure": { "apkPath", "dexFiles", "nativeLibs", "entryCount" },
+  "manifest": { "packageName", "versionName", "permissions", "mainActivity" },
+  "obfuscation": { "level", "obfuscatedRatio", "signals" },
+  "stats": { "classesTotal", "errors", "javaFiles", "sourceLines", "durationMs" },
+  "effectiveness": { "overallScore", "coverageScore", "integrityScore" },
+  "inputType": "APK",
+  "confidence": { "total", "averageScore", "structurallyValid", "excellent", "good" },
+  "recovery": { "filesProcessed", "filesModified", "javacSampled", "javacCompiled" },
+  "outputDir": "...",
+  "success": true,
+  "toolVersion": "0.1.0-beta"
 }
 ```
 
 #### Markdown Report
-- Tabla de confianza
-- Gráficos de distribución
-- Recomendaciones de calidad
+- Efectividad global y desglose por dimensión
+- Recuperación de código
+- Confianza por clase
+- Fortalezas, limitaciones y metodología
 
 ## Modelo de Datos
 
@@ -205,29 +213,30 @@ Options {
 ```java
 record ClassConfidence(
     String className,           // Ej: com.signal.MainActivity
-    String decompilerUsed,      // "JADX", "Vineflower", etc.
+    String decompilerUsed,      // "JADX"
     ConfidenceLevel level,      // EXCELLENT, GOOD, etc.
     int score,                  // 0-100
     List<String> issues,        // ["JADX warning", ...]
-    boolean compilesSuccessfully,
-    String sourceFormat         // "JAVA", "SMALI"
+    boolean structurallyValid   // heurística de estructura
 )
 ```
 
-### DecompiledProject (Resultado Final)
+### PipelineResult (Resultado Final)
 
 ```java
-record DecompiledProject(
-    String projectName,
-    Path sourceDirectory,
-    Path resourcesDirectory,
-    Path manifestPath,
-    String decompilerUsed,
-    ConfidenceMap.ConfidenceStats confidenceStats,
-    long durationMillis,
-    Instant createdAt,
-    String aquadecompVersion,
-    List<String> decompilerAttempts
+record PipelineResult(
+    ApkStructure structure,
+    ManifestInfo manifest,
+    ObfuscationInfo obfuscation,
+    DecompileStats stats,
+    EffectivenessReport effectiveness,
+    String inputType,
+    ConfidenceMap.ConfidenceStats confidence,
+    RecoveryReport recovery,
+    String outputDir,
+    boolean success,
+    String errorMessage,
+    String toolVersion
 )
 ```
 
@@ -237,8 +246,8 @@ record DecompiledProject(
 
 ```
 User Input (APK)
-    ↓ InputNormalizer
-Normalized (DEX + Resources)
+    ↓ InputNormalizer (valida formato, detecta tipo)
+    ↓ ApkInspector (estructura + manifiesto)
     ↓ DecompilerChain
     ├─ JadxDecompilerWrapper.decompile()
     │   ├─ Load DEX
@@ -246,15 +255,16 @@ Normalized (DEX + Resources)
     │   ├─ Save sources
     │   └─ Return success
     └─ (CFR, Procyon y Vineflower rescatan clases faltantes vía dex2jar)
+    ↓ RecoveryPipeline (cadenas, clases, metadatos, muestra javac)
     ↓ ConfidenceScorer
     ├─ Iterate each Java file
     ├─ Calculate score
     ├─ Record ClassConfidence
     └─ Generate ConfidenceMap
-    ↓ ComprehensiveReportGenerator
+    ↓ ReportWriter
     ├─ JSON report
     └─ Markdown report
-    ↓ DecompiledProject
+    ↓ PipelineResult
 Output Directory with all artifacts
 ```
 
@@ -325,7 +335,7 @@ if (content.contains("my_custom_pattern")) {
 
 ## Consideraciones de Diseño
 
-1. **Cadena de Respaldo**: Garantiza cobertura 100%, aunque varíe formato
+1. **Cadena de Respaldo**: Los motores de rescate cubren las clases que JADX no genera
 2. **Confianza por Clase**: Permite identificar qué clases son confiables
 3. **Formato Normalizado**: Todos los inputs se normalizan a estructura común
 4. **Reportes Detallados**: JSON para máquinas, Markdown para humanos
@@ -341,7 +351,7 @@ if (content.contains("my_custom_pattern")) {
 
 ## Roadmap de Mejoras
 
-1. **Fase 2.5**: Ghidra headless para .so
-2. **Fase 3**: frida-dexdump para packers
-3. **Fase 4**: Machine Learning para mejor scoring
-4. **Fase 5**: API REST + UI Web mejorada
+1. **Futuro**: Ghidra headless para código nativo (.so)
+2. **Futuro**: frida-dexdump para packers
+3. **Futuro**: Machine Learning para mejor scoring
+4. **Futuro**: API REST + UI Web mejorada

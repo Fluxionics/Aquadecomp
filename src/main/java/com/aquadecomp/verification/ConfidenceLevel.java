@@ -5,8 +5,7 @@ public enum ConfidenceLevel {
     GOOD("Bueno", 85),
     ACCEPTABLE("Aceptable", 70),
     POOR("Pobre", 50),
-    UNRELIABLE("No confiable", 25),
-    SMALI_FALLBACK("Solo Smali", 10);
+    UNRELIABLE("No confiable", 25);
 
     public final String label;
     public final int baseScore;
@@ -29,9 +28,6 @@ public enum ConfidenceLevel {
         if (score >= 40) {
             return POOR;
         }
-        if (score >= 25) {
-            return UNRELIABLE;
-        }
-        return SMALI_FALLBACK;
+        return UNRELIABLE;
     }
 }

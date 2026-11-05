@@ -312,6 +312,9 @@ public final class AquaGui {
         sb.append("══════════════════════════════════════════════════\n");
         sb.append(String.format("  EFECTIVIDAD GLOBAL: %.1f / 100%n", e.overallScore()));
         sb.append("══════════════════════════════════════════════════\n\n");
+        if (r.inputType() != null) {
+            sb.append("  Entrada     : ").append(r.inputType()).append('\n');
+        }
         sb.append(String.format("  Cobertura       : %5.1f   %s%n", e.coverageScore(), e.coverageDetail()));
         sb.append(String.format("  Integridad      : %5.1f   %s%n", e.integrityScore(), e.integrityDetail()));
         sb.append(String.format("  Identificadores : %5.1f   %s%n", e.identifierScore(), e.identifierDetail()));
@@ -340,6 +343,36 @@ public final class AquaGui {
         sb.append(String.format("  Errores    : %d  (avisos: %d)%n", st.errors(), st.warns()));
         sb.append(String.format("  Archivos   : %d .java, %d líneas%n", st.javaFiles(), st.sourceLines()));
         sb.append(String.format("  Duración   : %.1f s%n", st.durationMs() / 1000.0));
+        if (r.recovery() != null) {
+            var rec = r.recovery();
+            sb.append("\n──────────────── RECUPERACIÓN ─────────────\n");
+            sb.append(String.format("  Archivos   : %d procesados, %d modificados%n",
+                    rec.filesProcessed(), rec.filesModified()));
+            for (var item : rec.items().entrySet()) {
+                sb.append("  ").append(item.getKey()).append(": ")
+                        .append(item.getValue()).append('\n');
+            }
+            if (rec.javacSampled() > 0) {
+                sb.append(String.format("  javac      : %d/%d sin errores de sintaxis%n",
+                        rec.javacCompiled(), rec.javacSampled()));
+            } else {
+                sb.append("  javac      : no disponible\n");
+            }
+            sb.append(String.format("  Kotlin     : %d clases | internas: %d%n",
+                    rec.kotlinClasses(), rec.innerClasses()));
+        }
+        if (r.confidence() != null && r.confidence().total() > 0) {
+            var c = r.confidence();
+            sb.append("\n──────────────── CONFIANZA ─────────────────\n");
+            sb.append(String.format("  Media      : %.1f/100 en %d clases%n",
+                    c.averageScore(), c.total()));
+            sb.append(String.format("  Excelente  : %d | Bueno: %d | Aceptable: %d%n",
+                    c.excellent(), c.good(), c.acceptable()));
+            sb.append(String.format("  Pobre      : %d | No confiable: %d%n",
+                    c.poor(), c.unreliable()));
+            sb.append(String.format("  Estructura válida: %d/%d (heurística)%n",
+                    c.structurallyValid(), c.total()));
+        }
         sb.append("\n──────────────── FORTALEZAS ────────────────\n");
         for (String s : e.strengths()) sb.append("  + ").append(s).append('\n');
         sb.append("\n──────────────── LIMITACIONES ──────────────\n");

@@ -38,7 +38,7 @@ java [JVM_OPTIONS] -jar aquedecomp.jar COMMAND [OPTIONS] INPUT
 
 #### `decompile`
 
-Descompila un APK, AAB o XAPK.
+Descompila un APK, AAB, XAPK o APKS.
 
 ```bash
 java -jar aquedecomp.jar decompile <archivo> -o <salida> [opciones]
@@ -50,8 +50,8 @@ java -jar aquedecomp.jar decompile <archivo> -o <salida> [opciones]
 |--------|------|---------|-------------|
 | `-o, --out` | PATH | `./aquadecomp-out/<nombre>` | Directorio de salida |
 | `--threads` | INT | 0 (auto) | Threads a usar |
-| `--no-resources` | flag | activado | No extraer recursos (solo código) |
-| `--no-deobf` | flag | activado | No intentar desofuscación de nombres |
+| `--no-resources` | flag | apagado | No extraer recursos (solo código) |
+| `--no-deobf` | flag | apagado | Desactivar el renombrado de nombres de JADX |
 | `-q, --quiet` | flag | apagado | Solo mostrar el resumen final |
 | `--no-md` | flag | apagado | No generar reporte Markdown |
 | `--no-json` | flag | apagado | No generar reporte JSON |
@@ -152,9 +152,8 @@ java -Xmx12g -jar aquedecomp.jar decompile protected.apk -o ./protected_analysis
     --threads 16
 
 # Lee el reporte:
-# - Verifica stats.smali_only (si es alto, protegido)
-# - Revisa confidence_breakdown
-# - Nota: Si score_avg < 50%, probablemente empacado
+# - Revisa confidence (conteos por nivel y puntaje medio)
+# - Nota: Si averageScore < 50, probablemente empacado
 ```
 
 ### Caso 4: AAB (Android App Bundle)
@@ -278,6 +277,28 @@ Estructura (serialización Gson de `PipelineResult`):
     "limitations": ["Nombres ofuscados sin mapping.txt"],
     "methodology": "0.40*Cobertura + 0.25*Integridad + 0.25*Identificadores + 0.10*Recursos"
   },
+  "inputType": "APK",
+  "confidence": {
+    "total": 6425,
+    "excellent": 812,
+    "good": 2410,
+    "acceptable": 1988,
+    "poor": 955,
+    "unreliable": 260,
+    "averageScore": 68.0,
+    "structurallyValid": 6146,
+    "decompilerStats": { "JADX": 6425 }
+  },
+  "recovery": {
+    "filesProcessed": 6425,
+    "filesModified": 0,
+    "javacSampled": 40,
+    "javacCompiled": 16,
+    "kotlinClasses": 4940,
+    "innerClasses": 773,
+    "items": {},
+    "durationMs": 209043
+  },
   "outputDir": "./output",
   "success": true,
   "errorMessage": null,
@@ -296,6 +317,7 @@ Ejemplo (generado por `ReportWriter.markdown`):
 - **APK:** C:/apk-work/app.apk
 - **Tamaño:** 50.91 MB
 - **Versión Aquadecomp:** 0.1.0-beta
+- **Entrada:** APK
 
 ## Efectividad global: 78.5/100
 
@@ -331,6 +353,32 @@ Ejemplo (generado por `ReportWriter.markdown`):
 | Archivos .java | 43800 |
 | Líneas de código | 5120000 |
 | Duración | 45.2 s |
+
+## Recuperación de código
+
+| Métrica | Valor |
+|---|---:|
+| Archivos procesados | 6425 |
+| Archivos modificados | 0 |
+| Muestra javac sin errores de sintaxis | 16 / 40 |
+| Clases con metadatos Kotlin | 4940 |
+| Clases internas detectadas | 773 |
+| Duración | 209.0 s |
+
+## Confianza por clase
+
+| Nivel | Clases |
+|---|---:|
+| Excelente | 812 |
+| Bueno | 2410 |
+| Aceptable | 1988 |
+| Pobre | 955 |
+| No confiable | 260 |
+| **Total** | 6425 |
+
+- Puntaje medio: 68.0/100
+- Fiables (excelente + bueno + aceptable): 81.0%
+- Estructura válida (heurística, no compilación real): 6146/6425 (95.7%)
 
 ## Fortalezas
 
@@ -467,7 +515,7 @@ File > Project Structure > Modules
 cfr app.apk --outputdir ./cfr_output
 
 # Comparar reportes
-diff <(jq .statistics.average_score aquedecomp-report.json) \
+diff <(jq .confidence.averageScore aquedecomp-report.json) \
      <(tu_otro_tool_report.json)
 ```
 
@@ -495,9 +543,9 @@ done
 
 for report in */aquedecomp-report.json; do
     app=$(dirname "$report")
-    score=$(jq .statistics.average_score "$report")
-    compilable=$(jq .statistics.compilable.percentage "$report")
-    echo "$app: score=$score, compilable=$compilable"
+    score=$(jq .confidence.averageScore "$report")
+    valid=$(jq .confidence.structurallyValid "$report")
+    echo "$app: confianza=$score, estructura válida=$valid"
 done
 ```
 

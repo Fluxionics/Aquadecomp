@@ -19,14 +19,10 @@ public final class MetadataExtractor {
             "SourceFile\\s*=\\s*[\"']([^\"']+)[\"']"
     );
 
-    public String extractMetadata(String source, String className) {
-        String result = source;
-
+    public void extract(String source, String className) {
         extractAnnotations(source, className);
         extractKotlinMetadata(source, className);
         extractSourceFileInfo(source, className);
-
-        return result;
     }
 
     private void extractAnnotations(String source, String className) {

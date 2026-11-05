@@ -1,5 +1,6 @@
 package com.aquadecomp.core;
 
+import com.aquadecomp.verification.ConfidenceMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -10,6 +11,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class ReportWriter {
 
@@ -27,6 +29,59 @@ public final class ReportWriter {
         return file;
     }
 
+    private static void appendRecovery(StringBuilder sb, PipelineResult r) {
+        PipelineResult.RecoveryReport rec = r.recovery();
+        if (rec == null) {
+            return;
+        }
+        sb.append("## Recuperación de código\n\n");
+        sb.append("| Métrica | Valor |\n|---|---:|\n");
+        sb.append("| Archivos procesados | ").append(rec.filesProcessed()).append(" |\n");
+        sb.append("| Archivos modificados | ").append(rec.filesModified()).append(" |\n");
+        for (Map.Entry<String, Integer> item : rec.items().entrySet()) {
+            sb.append("| ").append(cell(item.getKey())).append(" | ")
+                    .append(item.getValue()).append(" |\n");
+        }
+        if (rec.javacSampled() > 0) {
+            sb.append("| Muestra javac sin errores de sintaxis | ")
+                    .append(rec.javacCompiled()).append(" / ")
+                    .append(rec.javacSampled()).append(" |\n");
+        }
+        sb.append("| Clases con metadatos Kotlin | ").append(rec.kotlinClasses()).append(" |\n");
+        sb.append("| Clases internas detectadas | ").append(rec.innerClasses()).append(" |\n");
+        sb.append("| Duración | ").append(String.format(Locale.ROOT, "%.1f s",
+                rec.durationMs() / 1000.0)).append(" |\n\n");
+        if (rec.filesModified() > 0) {
+            sb.append("Los archivos modificados conservan una copia con extensión `.bak`.\n\n");
+        }
+        if (rec.javacSampled() == 0) {
+            sb.append("Muestra javac no disponible: `javac` no está en el PATH.\n\n");
+        }
+    }
+
+    private static void appendConfidence(StringBuilder sb, PipelineResult r) {
+        ConfidenceMap.ConfidenceStats c = r.confidence();
+        if (c == null || c.total() == 0) {
+            return;
+        }
+        sb.append("## Confianza por clase\n\n");
+        sb.append("| Nivel | Clases |\n|---|---:|\n");
+        sb.append("| Excelente | ").append(c.excellent()).append(" |\n");
+        sb.append("| Bueno | ").append(c.good()).append(" |\n");
+        sb.append("| Aceptable | ").append(c.acceptable()).append(" |\n");
+        sb.append("| Pobre | ").append(c.poor()).append(" |\n");
+        sb.append("| No confiable | ").append(c.unreliable()).append(" |\n");
+        sb.append("| **Total** | ").append(c.total()).append(" |\n\n");
+        sb.append(String.format(Locale.ROOT,
+                "- Puntaje medio: %.1f/100%n", c.averageScore()));
+        sb.append(String.format(Locale.ROOT,
+                "- Fiables (excelente + bueno + aceptable): %.1f%%%n", c.getReliablePercentage()));
+        sb.append(String.format(Locale.ROOT,
+                "- Estructura válida (heurística, no compilación real): %d/%d (%.1f%%)%n",
+                c.structurallyValid(), c.total(), c.getStructurallyValidPercentage()));
+        sb.append('\n');
+    }
+
     static String markdown(PipelineResult r) {
         StringBuilder sb = new StringBuilder();
         sb.append("# Aquadecomp — Reporte de descompilación\n\n");
@@ -34,7 +89,11 @@ public final class ReportWriter {
         sb.append("- **APK:** ").append(r.structure().apkPath()).append('\n');
         sb.append("- **Tamaño:** ").append(String.format(Locale.ROOT, "%.2f MB",
                 r.structure().sizeBytes() / 1024.0 / 1024.0)).append('\n');
-        sb.append("- **Versión Aquadecomp:** ").append(r.toolVersion()).append("\n\n");
+        sb.append("- **Versión Aquadecomp:** ").append(r.toolVersion()).append('\n');
+        if (r.inputType() != null) {
+            sb.append("- **Entrada:** ").append(r.inputType()).append('\n');
+        }
+        sb.append('\n');
 
         if (!r.success()) {
             sb.append("## Error\n\n").append(r.errorMessage()).append('\n');
@@ -88,6 +147,9 @@ public final class ReportWriter {
         sb.append("| Líneas de código | ").append(st.sourceLines()).append(" |\n");
         sb.append("| Duración | ").append(String.format(Locale.ROOT, "%.1f s", st.durationMs() / 1000.0)).append(" |\n\n");
 
+        appendRecovery(sb, r);
+        appendConfidence(sb, r);
+
         sb.append("## Fortalezas\n\n");
         for (String s : e.strengths()) sb.append("- ").append(s).append('\n');
         sb.append("\n## Limitaciones\n\n");
@@ -121,6 +183,22 @@ public final class ReportWriter {
         sb.append("╠══════════════════════════════════════════════════╣\n");
         sb.append(String.format(Locale.ROOT, "║  Salida: %-43s ║%n", shorten(r.outputDir(), 43)));
         sb.append("╚══════════════════════════════════════════════════╝\n");
+        if (r.confidence() != null && r.confidence().total() > 0) {
+            sb.append(String.format(Locale.ROOT,
+                    "Confianza media: %.1f/100 (%d clases)%n",
+                    r.confidence().averageScore(), r.confidence().total()));
+        }
+        if (r.recovery() != null) {
+            sb.append(String.format(Locale.ROOT,
+                    "Recuperación: %d/%d archivos modificados",
+                    r.recovery().filesModified(), r.recovery().filesProcessed()));
+            if (r.recovery().javacSampled() > 0) {
+                sb.append(String.format(Locale.ROOT,
+                        " | javac: %d/%d sin errores de sintaxis",
+                        r.recovery().javacCompiled(), r.recovery().javacSampled()));
+            }
+            sb.append('\n');
+        }
         return sb.toString();
     }
 

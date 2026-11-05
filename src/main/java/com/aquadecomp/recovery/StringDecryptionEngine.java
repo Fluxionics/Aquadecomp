@@ -1,147 +1,182 @@
 package com.aquadecomp.recovery;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class StringDecryptionEngine {
 
-    private final Map<String, String> decryptedStrings = new HashMap<>();
-    private static final Pattern BYTE_ARRAY = Pattern.compile(
-            "new\\s+byte\\[\\]\\s*\\{\\s*([^}]+)\\}"
+    private static final Pattern STRING_BYTE_ARRAY = Pattern.compile(
+            "new\\s+String\\s*\\(\\s*new\\s+byte\\[\\]\\s*\\{([^}]+)\\}\\s*(?:,\\s*\"([^\"]+)\"\\s*)?\\)"
     );
-    private static final Pattern XOR_PATTERN = Pattern.compile(
-            "\\(byte\\)\\s*\\(([^)]+)\\s*\\^\\s*([^)]+)\\)"
+    private static final Pattern STRING_BASE64 = Pattern.compile(
+            "new\\s+String\\s*\\(\\s*(?:android\\.util\\.)?Base64\\.decode\\s*\\(\\s*\"([A-Za-z0-9+/=]+)\""
+                    + "\\s*(?:,[^)]*)?\\s*\\)\\s*(?:,\\s*\"([^\"]+)\"\\s*)?\\)"
     );
+
+    private int lastReplacementCount;
 
     public String attemptDecryption(String source) {
-        String result = source;
+        lastReplacementCount = 0;
+        Map<String, String> decrypted = new HashMap<>();
 
-        result = decryptXorPatterns(result);
-        result = decryptByteArrays(result);
-        result = decryptCommonEncryption(result);
-        result = replaceDecryptedStrings(result);
+        String result = foldByteArrays(source, decrypted);
+        result = foldBase64(result, decrypted);
 
+        lastReplacementCount = decrypted.size();
         return result;
     }
 
-    private String decryptXorPatterns(String source) {
-        java.util.regex.Matcher matcher = XOR_PATTERN.matcher(source);
+    private String foldByteArrays(String source, Map<String, String> decrypted) {
+        Matcher matcher = STRING_BYTE_ARRAY.matcher(source);
+        StringBuffer sb = new StringBuffer();
 
         while (matcher.find()) {
+            String replacement = null;
             try {
-                String value1 = matcher.group(1).trim();
-                String value2 = matcher.group(2).trim();
-
-                byte b1 = parseByte(value1);
-                byte b2 = parseByte(value2);
-                byte result = (byte) (b1 ^ b2);
-
-                if (isPrintable(result)) {
-                    String encrypted = matcher.group(0);
-                    String decrypted = String.valueOf((char) result);
-                    decryptedStrings.put(encrypted, decrypted);
+                byte[] bytes = parseByteArray(matcher.group(1));
+                Charset charset = resolveCharset(matcher.group(2));
+                if (bytes != null && charset != null) {
+                    String text = new String(bytes, charset);
+                    if (isPrintableText(text)) {
+                        replacement = quote(text);
+                        decrypted.put(matcher.group(0), replacement);
+                    }
                 }
             } catch (Exception ignored) {
             }
+            if (replacement == null) {
+                replacement = Matcher.quoteReplacement(matcher.group(0));
+            }
+            matcher.appendReplacement(sb, replacement);
         }
-
-        return source;
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 
-    private String decryptByteArrays(String source) {
-        java.util.regex.Matcher matcher = BYTE_ARRAY.matcher(source);
+    private String foldBase64(String source, Map<String, String> decrypted) {
+        Matcher matcher = STRING_BASE64.matcher(source);
+        StringBuffer sb = new StringBuffer();
 
         while (matcher.find()) {
+            String replacement = null;
             try {
-                String bytesStr = matcher.group(1);
-                String decrypted = decryptByteSequence(bytesStr);
-
-                if (!decrypted.isEmpty() && isProbablyText(decrypted)) {
-                    decryptedStrings.put(matcher.group(0), "\"" + decrypted + "\"");
+                Charset charset = resolveCharset(matcher.group(2));
+                byte[] bytes = decodeBase64(matcher.group(1));
+                if (bytes != null && charset != null) {
+                    String text = new String(bytes, charset);
+                    if (isPrintableText(text)) {
+                        replacement = quote(text);
+                        decrypted.put(matcher.group(0), replacement);
+                    }
                 }
             } catch (Exception ignored) {
             }
+            if (replacement == null) {
+                replacement = Matcher.quoteReplacement(matcher.group(0));
+            }
+            matcher.appendReplacement(sb, replacement);
         }
-
-        return source;
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 
-    private String decryptByteSequence(String bytesStr) {
-        StringBuilder result = new StringBuilder();
-        String[] bytes = bytesStr.split(",");
+    private byte[] parseByteArray(String body) {
+        String[] parts = body.split(",");
+        byte[] bytes = new byte[parts.length];
 
-        for (String byteStr : bytes) {
+        for (int i = 0; i < parts.length; i++) {
+            Integer value = evaluateElement(parts[i].trim());
+            if (value == null) {
+                return null;
+            }
+            bytes[i] = (byte) value.intValue();
+        }
+        return bytes;
+    }
+
+    private Integer evaluateElement(String element) {
+        if (element.isEmpty()) {
+            return null;
+        }
+        if (element.startsWith("(byte)")) {
+            return evaluateElement(element.substring(6).trim());
+        }
+        if (element.startsWith("(") && element.endsWith(")")) {
+            return evaluateElement(element.substring(1, element.length() - 1).trim());
+        }
+        int xor = element.indexOf('^');
+        if (xor > 0) {
+            Integer left = evaluateElement(element.substring(0, xor).trim());
+            Integer right = evaluateElement(element.substring(xor + 1).trim());
+            if (left == null || right == null) {
+                return null;
+            }
+            return left ^ right;
+        }
+        try {
+            if (element.startsWith("0x") || element.startsWith("0X")) {
+                return Integer.parseInt(element.substring(2), 16);
+            }
+            return Integer.parseInt(element);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private byte[] decodeBase64(String encoded) {
+        try {
+            return Base64.getDecoder().decode(encoded);
+        } catch (IllegalArgumentException e) {
             try {
-                byte b = parseByte(byteStr.trim());
-                if (isPrintable(b)) {
-                    result.append((char) b);
-                }
-            } catch (Exception ignored) {
+                return Base64.getUrlDecoder().decode(encoded);
+            } catch (IllegalArgumentException e2) {
+                return null;
             }
         }
-
-        return result.toString();
     }
 
-    private String decryptCommonEncryption(String source) {
-        String result = source.replaceAll(
-                "Cipher\\.getInstance\\([\"']AES[\"']\\)",
-                "// AES encryption detected"
-        );
-        result = result.replaceAll(
-                "MessageDigest\\.getInstance\\([\"']SHA\\-256[\"']\\)",
-                "// SHA-256 detected"
-        );
-
-        return result;
-    }
-
-    private String replaceDecryptedStrings(String source) {
-        String result = source;
-
-        for (Map.Entry<String, String> entry : decryptedStrings.entrySet()) {
-            String encrypted = entry.getKey();
-            String decrypted = entry.getValue();
-            result = result.replace(encrypted, decrypted);
+    private Charset resolveCharset(String name) {
+        if (name == null || name.isBlank()) {
+            return StandardCharsets.UTF_8;
         }
-
-        return result;
-    }
-
-    private byte parseByte(String str) {
-        str = str.trim();
-
-        if (str.startsWith("0x") || str.startsWith("0X")) {
-            return (byte) Integer.parseInt(str.substring(2), 16);
-        } else if (str.startsWith("(byte)")) {
-            return parseByte(str.substring(6));
-        } else {
-            return Byte.parseByte(str);
+        try {
+            return Charset.forName(name);
+        } catch (Exception e) {
+            return null;
         }
     }
 
-    private boolean isPrintable(byte b) {
-        return b >= 32 && b <= 126;
-    }
-
-    private boolean isProbablyText(String str) {
-        if (str.length() < 3) {
+    private boolean isPrintableText(String text) {
+        if (text.isEmpty()) {
             return false;
         }
-
-        int printable = 0;
-        for (char c : str.toCharArray()) {
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                (c >= '0' && c <= '9') || c == '_' || c == ' ') {
-                printable++;
+        for (char c : text.toCharArray()) {
+            if (c < 32 || c > 126) {
+                return false;
             }
         }
-
-        return (printable * 100 / str.length()) > 70;
+        return true;
     }
 
-    public Map<String, String> getDecryptedStrings() {
-        return new HashMap<>(decryptedStrings);
+    private String quote(String text) {
+        StringBuilder sb = new StringBuilder(text.length() + 2);
+        sb.append('"');
+        for (char c : text.toCharArray()) {
+            if (c == '"' || c == '\\') {
+                sb.append('\\');
+            }
+            sb.append(c);
+        }
+        sb.append('"');
+        return sb.toString();
+    }
+
+    public int lastReplacementCount() {
+        return lastReplacementCount;
     }
 }

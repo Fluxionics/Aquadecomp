@@ -4,18 +4,25 @@ Aquadecomp es una plataforma de descompilación de aplicaciones Android que inte
 
 ## Características Principales
 
-### v0.3: Motores de Recuperación (Experimental)
+### Flujo de Trabajo
 
-Aquadecomp v0.3 incluye motores de recuperación de código ofuscado (paquete `recovery`):
+`decompile` ejecuta un único flujo con todas las etapas conectadas:
 
-- **StringDecryptionEngine**: Recupera strings encriptados (XOR, byte arrays)
-- **NameRecoveryEngine**: Recupera nombres reales desde múltiples fuentes (ProGuard, Kotlin, recursos)
-- **DeobfuscationEngine**: Aplica mapeado de nombres y patrones de desofuscación
-- **ClassRecoveryEngine**: Recupera clases internas, anónimas y faltantes
-- **MetadataExtractor**: Extrae metadata de Kotlin, anotaciones y genéricos
-- **RealCompilationVerifier**: Verifica con javac (compilación real, no heurística)
+1. **NORMALIZANDO ENTRADA** - valida el formato (APK/AAB/XAPK/APKS) y rechaza archivos no soportados
+2. **INSPECCIONANDO APK** - estructura ZIP, DEX, libs nativas, packers
+3. **DECODIFICANDO MANIFIESTO** - paquete, versión, permisos, actividad principal
+4. **DESCOMPILANDO A JAVA** - JADX como motor principal, con rescate de clases faltantes mediante CFR, Procyon y Vineflower
+5. **RECUPERANDO CÓDIGO** - descifrado de cadenas constantes, análisis de clases y metadatos, y verificación de sintaxis con javac sobre una muestra
+6. **PUNTUANDO CONFIANZA** - puntaje 0-100 por clase con niveles (Excelente/Bueno/Aceptable/Pobre/No confiable)
+7. **CALCULANDO EFECTIVIDAD** - puntaje global con cuatro dimensiones y reportes JSON + Markdown
 
-Estos motores son experimentales y todavía no forman parte del flujo principal de descompilación.
+### Motores de Recuperación (paquete `recovery`)
+
+- **StringDecryptionEngine**: convierte literales constantes a cadenas legibles (`new String(new byte[]{...})`, `new String(Base64.decode("..."))`) sin alterar el resto del código
+- **ClassRecoveryEngine**: detecta clases internas, anónimas y vacías en el código fuente
+- **MetadataExtractor**: detecta metadatos de Kotlin, anotaciones y archivos de origen
+- **RealCompilationVerifier**: verifica una muestra de archivos con `javac` real, distinguiendo errores de sintaxis de los de resolución de dependencias
+- **RecoveryPipeline**: orquesta los motores sobre todos los archivos de `sources/`; los archivos modificados conservan una copia `.bak`
 
 ### Cadena de Descompiladores
 
@@ -41,7 +48,7 @@ El flujo principal calcula un puntaje de efectividad 0-100 con cuatro dimensione
 
 El detalle sale en `aquedecomp-report.json` (`effectiveness`) y en el reporte Markdown.
 
-El paquete `verification` incluye además un punteo por clase con niveles (Excelente/Bueno/Aceptable/Pobre/No confiable); forma parte del orquestador experimental, ver más abajo.
+El paquete `verification` calcula además un puntaje por clase con niveles (Excelente/Bueno/Aceptable/Pobre/No confiable), que se incluye en el reporte bajo `confidence`.
 
 ### Soporte Multi-Formato
 
@@ -109,27 +116,44 @@ java -jar aquedecomp.jar --gui
 
 ```
 src/main/java/com/aquadecomp/
+├── Aquadecomp.java               Punto de entrada (CLI o GUI)
+├── cli/
+│   └── AquaCli.java              Comandos de línea (decompile, inspect)
+├── gui/
+│   └── AquaGui.java              Interfaz gráfica Swing
 ├── core/
-│   ├── AquadecompOrchestrator.java      Orquestador principal
-│   ├── DecompiledProject.java           Modelo de resultado
-│   └── PipelineListener.java            Callbacks de progreso
+│   ├── Pipeline.java             Flujo principal (etapas 1-7)
+│   ├── PipelineListener.java     Callbacks de progreso
+│   ├── PipelineResult.java       Resultado + reportes de recuperación
+│   ├── ReportWriter.java         Reportes JSON y Markdown
+│   ├── DecompileEngine.java      Integración con JADX
+│   ├── ApkInspector.java         Estructura y manifiesto
+│   ├── AxmlParser.java           XML binario del manifiesto
+│   ├── EffectivenessCalculator.java  Puntaje de efectividad
+│   └── ObfuscationDetector.java  Análisis de ofuscación
 ├── decompilation/
-│   ├── DecompilerStrategy.java          Interfaz de estrategia
-│   ├── DecompilerChain.java             Cadena de respaldo
-│   ├── Dex2JarConverter.java            Conversión APK a JAR (dex2jar)
-│   ├── JadxDecompilerWrapper.java       JADX wrapper
-│   ├── VineflowerDecompiler.java        Rescate con Vineflower
-│   ├── ProcyonDecompiler.java           Rescate con Procyon
-│   └── CfrDecompiler.java               Rescate con CFR
+│   ├── DecompilerStrategy.java   Interfaz de estrategia
+│   ├── DecompilerChain.java      Cadena de respaldo
+│   ├── Dex2JarConverter.java    Conversión APK a JAR (dex2jar)
+│   ├── JadxDecompilerWrapper.java  JADX wrapper
+│   ├── VineflowerDecompiler.java   Rescate con Vineflower
+│   ├── ProcyonDecompiler.java      Rescate con Procyon
+│   └── CfrDecompiler.java          Rescate con CFR
 ├── input/
-│   └── InputNormalizer.java             Normaliza APK/AAB/XAPK
-├── verification/
-│   ├── ConfidenceScorer.java            Califica clases
-│   ├── ConfidenceMap.java               Mapa de confianza
-│   ├── ClassConfidence.java             Datos de confianza
-│   └── ConfidenceLevel.java             Enum de niveles
-└── reporting/
-    └── ComprehensiveReportGenerator.java Genera reportes
+│   └── InputNormalizer.java      Validación y detección de formato
+├── recovery/
+│   ├── RecoveryPipeline.java     Orquestación de recuperación
+│   ├── StringDecryptionEngine.java   Descifrado de literales constantes
+│   ├── ClassRecoveryEngine.java      Análisis de estructura de clases
+│   ├── MetadataExtractor.java        Metadatos Kotlin/anotaciones
+│   └── RealCompilationVerifier.java  Verificación de sintaxis con javac
+└── verification/
+    ├── ConfidenceScorer.java     Puntaje por clase
+    ├── ConfidenceMap.java        Mapa de confianza
+    ├── ClassConfidence.java      Datos de confianza
+    ├── ConfidenceLevel.java      Enum de niveles
+    ├── CompilationVerifier.java  Verificación estructural heurística
+    └── SyntheticCodeDetector.java  Detección de código generado/sintético
 ```
 
 ## Archivos de Salida
@@ -154,6 +178,9 @@ Contiene:
 - Análisis de ofuscación (ratio, nivel, señales)
 - Estadísticas de descompilación (clases, errores, líneas, duración)
 - Informe de efectividad (puntaje global y por dimensión)
+- Formato de entrada (`inputType`)
+- Confianza por clase (`confidence`: conteos por nivel, puntaje medio)
+- Recuperación (`recovery`: archivos procesados/modificados, muestra javac, clases Kotlin e internas)
 
 Ejemplo de estructura (campos reales):
 ```json
@@ -163,6 +190,9 @@ Ejemplo de estructura (campos reales):
   "obfuscation": { "level": "MEDIA", "obfuscatedRatio": 0.67, "...": "..." },
   "stats": { "classesTotal": 46528, "errors": 12, "javaFiles": 43800, "...": "..." },
   "effectiveness": { "overallScore": 78.5, "coverageScore": 94.7, "...": "..." },
+  "inputType": "APK",
+  "confidence": { "total": 6425, "averageScore": 68.0, "structurallyValid": 6146, "...": "..." },
+  "recovery": { "filesProcessed": 6425, "filesModified": 0, "javacSampled": 40, "javacCompiled": 16, "...": "..." },
   "success": true,
   "toolVersion": "0.1.0-beta"
 }
@@ -177,6 +207,8 @@ Generado para lectura humana con:
 - Datos de la aplicación y permisos
 - Señales de ofuscación detectadas
 - Tabla de estadísticas
+- Recuperación de código (archivos, muestra javac, clases Kotlin e internas)
+- Confianza por clase (tabla de niveles, puntaje medio, estructura válida)
 - Fortalezas, limitaciones y metodología del puntaje
 
 ## Configuración Avanzada
@@ -231,31 +263,27 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 
 ## Roadmap (Fases de Desarrollo)
 
-### Fase 1: Base ( Completado v0.1)
+### Fase 1: Base (Completado v0.1)
 - Cadena de descompiladores (JADX primario + rescate con CFR, Procyon y Vineflower)
 - Sistema de confianza por clase
 - Soporte multi-formato (APK/AAB/XAPK)
 - Reportes JSON y Markdown
 
-### Fase 2: Robustez ( Completado v0.2)
+### Fase 2: Robustez (Completado v0.2)
 - Agregado Procyon como descompilador 5to
 - CompilationVerifier para heurística de compilación
 - SyntheticCodeDetector para código sintético
 - Mejora de manejo de errores y tolerancia parcial
 
-### Fase 3: Recuperación ( Completado v0.3)
-- StringDecryptionEngine - Recuperación de strings
-- NameRecoveryEngine - Recuperación de nombres desde múltiples fuentes
-- DeobfuscationEngine - Desofuscación automática
-- ClassRecoveryEngine - Recuperación de clases
-- MetadataExtractor - Preservación de metadata
-- RealCompilationVerifier - Verificación con javac real
-- RecoveryPipeline - Orquestación de recuperación
-- Integración con ConfidenceScorer (experimental)
+### Fase 3: Recuperación (Completado v0.3, conectado al flujo)
+- StringDecryptionEngine - descifrado de literales constantes
+- ClassRecoveryEngine - análisis de estructura de clases
+- MetadataExtractor - detección de metadatos
+- RealCompilationVerifier - verificación de sintaxis con javac real
+- RecoveryPipeline - orquestación de recuperación
+- ConfidenceScorer - puntaje por clase integrado en Pipeline
 
 ### Fase 4: Optimización y Extensión (Próxima)
-- [ ] Paralelización de motores de recuperación
-- [ ] Caché de resultados de compilación
 - [ ] Integración con Ghidra para código nativo (.so)
 - [ ] Soporte para ProGuard/R8 mapping.txt
 - [ ] API REST para integración
@@ -272,9 +300,9 @@ java -Xmx6g -jar aquedecomp.jar decompile large.apk -o ./output
 
 ### Clases sin descompilación
 
-- Verificar reporte JSON: `statistics.smali_only`
 - Revisar `aquedecomp-report.md` para detalles
 - Revisar la fase "RESCATANDO CLASES" del log para ver qué motores actuaron
+- Revisar el campo `stats.javaFiles` contra `stats.classesTotal` en el JSON
 
 ## Licencia
 

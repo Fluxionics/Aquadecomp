@@ -8,8 +8,7 @@ public record ClassConfidence(
         ConfidenceLevel level,
         int score,
         List<String> issues,
-        boolean compilesSuccessfully,
-        String sourceFormat
+        boolean structurallyValid
 ) {
     public boolean isReliable() {
         return level == ConfidenceLevel.EXCELLENT
@@ -27,8 +26,7 @@ public record ClassConfidence(
         private ConfidenceLevel level;
         private int score = 50;
         private List<String> issues = java.util.Collections.emptyList();
-        private boolean compilesSuccessfully;
-        private String sourceFormat = "JAVA";
+        private boolean structurallyValid;
 
         public Builder(String className) {
             this.className = className;
@@ -55,13 +53,8 @@ public record ClassConfidence(
             return this;
         }
 
-        public Builder compiles(boolean success) {
-            this.compilesSuccessfully = success;
-            return this;
-        }
-
-        public Builder format(String format) {
-            this.sourceFormat = format;
+        public Builder structurallyValid(boolean valid) {
+            this.structurallyValid = valid;
             return this;
         }
 
@@ -72,8 +65,7 @@ public record ClassConfidence(
                     level,
                     score,
                     issues,
-                    compilesSuccessfully,
-                    sourceFormat
+                    structurallyValid
             );
         }
     }

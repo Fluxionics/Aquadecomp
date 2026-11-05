@@ -7,54 +7,84 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public final class RealCompilationVerifier {
 
-    public CompilationResult verify(Path javaFile) throws IOException {
+    private static final long JAVAC_TIMEOUT_MS = 8000;
+
+    public boolean isAvailable() {
+        try {
+            Process process = new ProcessBuilder("javac", "-version")
+                    .redirectErrorStream(true)
+                    .start();
+            drain(process);
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    public CompilationResult verify(Path javaFile) {
         if (!Files.exists(javaFile) || !javaFile.toString().endsWith(".java")) {
-            return new CompilationResult(false, new ArrayList<>(), -1);
+            return new CompilationResult(false, List.of(), -1);
         }
 
-        Path tempDir = Files.createTempDirectory("aquadecomp-compile");
+        Path tempDir;
+        try {
+            tempDir = Files.createTempDirectory("aquadecomp-compile");
+        } catch (IOException e) {
+            return new CompilationResult(false, List.of("No se pudo crear directorio temporal"), 0);
+        }
 
         try {
-            String result = invokeJavac(javaFile, tempDir);
-            List<String> errors = parseJavacOutput(result);
+            ProcessBuilder pb = new ProcessBuilder(
+                    "javac",
+                    "-d", tempDir.toString(),
+                    "-encoding", "UTF-8",
+                    "-nowarn",
+                    javaFile.toString()
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
 
+            if (!process.waitFor(JAVAC_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly();
+                drain(process);
+                return new CompilationResult(false, List.of("javac excedió el tiempo límite"), 0);
+            }
+
+            String output = drain(process);
+            List<String> errors = parseJavacOutput(output);
             boolean success = errors.isEmpty();
-            int score = calculateScore(errors);
 
-            return new CompilationResult(success, errors, score);
+            return new CompilationResult(success, errors, calculateScore(errors));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new CompilationResult(false, List.of("Verificación interrumpida"), 0);
         } catch (Exception e) {
-            List<String> errors = new ArrayList<>();
-            errors.add(e.getMessage());
-            return new CompilationResult(false, errors, 0);
+            return new CompilationResult(false, List.of(String.valueOf(e.getMessage())), 0);
         } finally {
             cleanupTempDir(tempDir);
         }
     }
 
-    private String invokeJavac(Path javaFile, Path outputDir) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder(
-                "javac",
-                "-d", outputDir.toString(),
-                "-encoding", "UTF-8",
-                javaFile.toString()
-        );
-
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-
+    private String drain(Process process) throws IOException {
         StringBuilder output = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
+                output.append(line).append('\n');
             }
         }
-
-        process.waitFor();
         return output.toString();
     }
 
@@ -62,48 +92,53 @@ public final class RealCompilationVerifier {
         List<String> errors = new ArrayList<>();
 
         for (String line : output.split("\n")) {
-            if (line.contains("error:") || line.contains("ERROR")) {
+            if (line.contains("error:")) {
+                if (isResolutionIssue(line)) {
+                    continue;
+                }
                 errors.add(line.trim());
             }
         }
-
+        if (output.contains("error: no se pudo encontrar o cargar clase principal")
+                || output.contains("error: could not find or load main class")) {
+            errors.add("javac no pudo ejecutarse");
+        }
         return errors;
+    }
+
+    private boolean isResolutionIssue(String line) {
+        String lower = line.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("cannot find symbol")
+                || lower.contains("does not exist")
+                || lower.contains("cannot access")
+                || lower.contains("no se puede encontrar el símbolo")
+                || lower.contains("no existe")
+                || lower.contains("no se puede acceder");
     }
 
     private int calculateScore(List<String> errors) {
         if (errors.isEmpty()) {
             return 100;
         }
-
         int deductions = 0;
-
         for (String error : errors) {
-            if (error.contains("cannot find symbol")) {
-                deductions += 5;
-            } else if (error.contains("incompatible types")) {
+            if (error.contains("incompatible types")) {
                 deductions += 7;
-            } else if (error.contains("method not found")) {
-                deductions += 10;
-            } else if (error.contains("class not found")) {
-                deductions += 8;
             } else {
-                deductions += 3;
+                deductions += 5;
             }
         }
-
         return Math.max(0, 100 - deductions);
     }
 
     private void cleanupTempDir(Path tempDir) {
-        try {
-            Files.walk(tempDir)
-                    .sorted((a, b) -> b.compareTo(a))
-                    .forEach(path -> {
-                        try {
-                            Files.delete(path);
-                        } catch (IOException ignored) {
-                        }
-                    });
+        try (var walk = Files.walk(tempDir)) {
+            walk.sorted((a, b) -> b.compareTo(a)).forEach(path -> {
+                try {
+                    Files.delete(path);
+                } catch (IOException ignored) {
+                }
+            });
         } catch (IOException ignored) {
         }
     }

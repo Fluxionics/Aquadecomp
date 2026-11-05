@@ -1,167 +1,226 @@
 package com.aquadecomp.recovery;
 
+import com.aquadecomp.core.PipelineListener;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.nio.file.StandardCopyOption;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 public final class RecoveryPipeline {
 
-    private final NameRecoveryEngine nameRecovery = new NameRecoveryEngine();
-    private final DeobfuscationEngine deobfuscationEngine = new DeobfuscationEngine(nameRecovery);
+    private static final int MAX_JAVAC_CHECKS = 40;
+    private static final int PROGRESS_INTERVAL = 500;
+
     private final StringDecryptionEngine stringDecryption = new StringDecryptionEngine();
     private final ClassRecoveryEngine classRecovery = new ClassRecoveryEngine();
     private final MetadataExtractor metadataExtractor = new MetadataExtractor();
     private final RealCompilationVerifier compilationVerifier = new RealCompilationVerifier();
 
-    private final Map<String, RecoveryMetrics> metrics = new HashMap<>();
+    private final Map<String, RecoveryMetrics> metrics = new LinkedHashMap<>();
 
-    public RecoveryResult recover(Path sourcesDir, Path resourcesDir) {
-        if (!Files.isDirectory(sourcesDir)) {
-            return new RecoveryResult(false, 0, new ArrayList<>(), new HashMap<>());
+    public RecoveryResult recover(Path sourcesDir, PipelineListener listener) {
+        long start = System.currentTimeMillis();
+        metrics.clear();
+
+        List<Path> files = listJavaFiles(sourcesDir);
+        if (files.isEmpty()) {
+            return new RecoveryResult(0, 0, 0, 0, 0, 0, 0,
+                    Map.of(), Map.of(), System.currentTimeMillis() - start);
         }
 
-        final int[] filesProcessedArray = {0};
-        final int[] filesRecoveredArray = {0};
-        List<String> recoveredItems = new ArrayList<>();
-        Map<String, RecoveryMetrics> fileMetrics = new HashMap<>();
+        boolean javacAvailable = compilationVerifier.isAvailable();
+        int step = Math.max(1, files.size() / MAX_JAVAC_CHECKS);
 
-        try {
-            Files.walk(sourcesDir)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .forEach(file -> {
-                        try {
-                            RecoveryMetrics result = recoverFile(file, resourcesDir);
-                            fileMetrics.put(file.toString(), result);
+        int modified = 0;
+        int stringsDecrypted = 0;
+        int javacSampled = 0;
+        int javacCompiled = 0;
 
-                            if (result.wasRecovered()) {
-                                filesRecoveredArray[0]++;
-                                recoveredItems.addAll(result.recoveredItems());
-                            }
+        for (int i = 0; i < files.size(); i++) {
+            Path file = files.get(i);
+            boolean fileModified = false;
+            int decryptedHere = 0;
 
-                            metrics.put(file.toString(), result);
-                        } catch (Exception ignored) {
-                        }
-                    });
+            try {
+                FileOutcome outcome = recoverFile(file);
+                fileModified = outcome.modified();
+                decryptedHere = outcome.stringsDecrypted();
+                modified += fileModified ? 1 : 0;
+                stringsDecrypted += decryptedHere;
+            } catch (Exception ignored) {
+            }
 
-            filesProcessedArray[0] = (int) Files.walk(sourcesDir)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .count();
+            boolean verify = javacAvailable
+                    && javacSampled < MAX_JAVAC_CHECKS
+                    && (i % step == 0 || fileModified);
+            if (verify) {
+                RealCompilationVerifier.CompilationResult check = compilationVerifier.verify(file);
+                javacSampled++;
+                if (check.isSuccess()) {
+                    javacCompiled++;
+                }
+                metrics.put(file.toString(), new RecoveryMetrics(
+                        file.toString(),
+                        fileModified ? List.of("Cadenas descifradas") : List.of(),
+                        check.score(),
+                        check.isSuccess(),
+                        fileModified
+                ));
+            }
 
-        } catch (Exception ignored) {
+            if ((i + 1) % PROGRESS_INTERVAL == 0 || i + 1 == files.size()) {
+                listener.onProgress(97, "Recuperación: "
+                        + (i + 1) + "/" + files.size() + " archivos");
+            }
         }
 
-        double recoveryRate = filesProcessedArray[0] > 0 ?
-                (filesRecoveredArray[0] * 100.0) / filesProcessedArray[0] : 0;
-        boolean success = recoveryRate >= 95.0;
+        int kotlinClasses = (int) metadataExtractor.getAllMetadata().values().stream()
+                .filter(MetadataExtractor.Metadata::isKotlin)
+                .count();
+        int innerClasses = (int) classRecovery.getRecoveredClasses().values().stream()
+                .filter(ClassRecoveryEngine.ClassInfo::isInner)
+                .count();
 
-        return new RecoveryResult(success, recoveryRate, recoveredItems, fileMetrics);
+        Map<String, Integer> items = new LinkedHashMap<>();
+        if (stringsDecrypted > 0) {
+            items.put("Cadenas descifradas", stringsDecrypted);
+        }
+
+        return new RecoveryResult(
+                files.size(),
+                modified,
+                javacSampled,
+                javacCompiled,
+                stringsDecrypted,
+                kotlinClasses,
+                innerClasses,
+                items,
+                new LinkedHashMap<>(metrics),
+                System.currentTimeMillis() - start
+        );
     }
 
-    private RecoveryMetrics recoverFile(Path file, Path resourcesDir) throws Exception {
-        String originalContent = Files.readString(file);
-        String recovered = originalContent;
-        List<String> items = new ArrayList<>();
-        String className = extractClassName(file);
-
-        recovered = stringDecryption.attemptDecryption(recovered);
-        if (!recovered.equals(originalContent)) {
-            items.add("String decryption applied");
+    private List<Path> listJavaFiles(Path sourcesDir) {
+        if (!Files.isDirectory(sourcesDir)) {
+            return List.of();
         }
-
-        nameRecovery.recoverFromKotlinMetadata(recovered, className);
-        nameRecovery.recoverFromSourceFile(recovered, className);
-        nameRecovery.recoverFromEnumPatterns(recovered, className);
-        nameRecovery.recoverFromResourceReferences(recovered);
-        nameRecovery.recoverFromCallContext(recovered);
-        
-        recovered = deobfuscationEngine.deobfuscate(recovered, className);
-        if (!recovered.equals(originalContent)) {
-            items.add("Deobfuscation applied");
+        try (Stream<Path> walk = Files.walk(sourcesDir)) {
+            return walk.filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            return List.of();
         }
+    }
 
-        recovered = classRecovery.recoverClasses(recovered);
-        if (!recovered.equals(originalContent)) {
-            items.add("Classes recovered");
-        }
+    private FileOutcome recoverFile(Path file) throws IOException {
+        String original = Files.readString(file);
+        String recovered = stringDecryption.attemptDecryption(original);
+        int decrypted = stringDecryption.lastReplacementCount();
 
-        metadataExtractor.extractMetadata(recovered, className);
+        classRecovery.analyze(recovered);
+        metadataExtractor.extract(recovered, extractClassName(file));
 
-        if (!recovered.equals(originalContent)) {
+        if (!recovered.equals(original)) {
             Path backup = file.resolveSibling(file.getFileName() + ".bak");
-            try {
-                Files.copy(file, backup, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException ignored) {
-            }
+            Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING);
             Files.writeString(file, recovered);
+            return new FileOutcome(true, decrypted);
         }
-
-        RealCompilationVerifier.CompilationResult compilationResult =
-                compilationVerifier.verify(file);
-
-        int score = compilationResult.score();
-        boolean isValid = compilationResult.isSuccess();
-
-        return new RecoveryMetrics(
-                file.toString(),
-                items,
-                score,
-                isValid,
-                !recovered.equals(originalContent)
-        );
+        return new FileOutcome(false, decrypted);
     }
 
     private String extractClassName(Path file) {
         String name = file.getFileName().toString();
-        return name.substring(0, name.lastIndexOf('.'));
+        return name.substring(0, lastDot(name));
+    }
+
+    private int lastDot(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? dot : name.length();
     }
 
     public Map<String, RecoveryMetrics> getMetrics() {
-        return new HashMap<>(metrics);
+        return new LinkedHashMap<>(metrics);
+    }
+
+    private record FileOutcome(boolean modified, int stringsDecrypted) {
     }
 
     public static final class RecoveryResult {
-        private final boolean success;
-        private final double recoveryRate;
-        private final List<String> recoveredItems;
+        private final int filesProcessed;
+        private final int filesModified;
+        private final int javacSampled;
+        private final int javacCompiled;
+        private final int stringsDecrypted;
+        private final int kotlinClasses;
+        private final int innerClasses;
+        private final Map<String, Integer> items;
         private final Map<String, RecoveryMetrics> fileMetrics;
+        private final long durationMs;
 
-        public RecoveryResult(boolean success, double recoveryRate,
-                              List<String> recoveredItems,
-                              Map<String, RecoveryMetrics> fileMetrics) {
-            this.success = success;
-            this.recoveryRate = recoveryRate;
-            this.recoveredItems = new ArrayList<>(recoveredItems);
-            this.fileMetrics = new HashMap<>(fileMetrics);
+        public RecoveryResult(int filesProcessed, int filesModified,
+                              int javacSampled, int javacCompiled,
+                              int stringsDecrypted, int kotlinClasses, int innerClasses,
+                              Map<String, Integer> items,
+                              Map<String, RecoveryMetrics> fileMetrics,
+                              long durationMs) {
+            this.filesProcessed = filesProcessed;
+            this.filesModified = filesModified;
+            this.javacSampled = javacSampled;
+            this.javacCompiled = javacCompiled;
+            this.stringsDecrypted = stringsDecrypted;
+            this.kotlinClasses = kotlinClasses;
+            this.innerClasses = innerClasses;
+            this.items = new LinkedHashMap<>(items);
+            this.fileMetrics = new LinkedHashMap<>(fileMetrics);
+            this.durationMs = durationMs;
         }
 
-        public boolean isSuccess() {
-            return success;
+        public int filesProcessed() {
+            return filesProcessed;
         }
 
-        public double recoveryRate() {
-            return recoveryRate;
+        public int filesModified() {
+            return filesModified;
         }
 
-        public List<String> recoveredItems() {
-            return new ArrayList<>(recoveredItems);
+        public int javacSampled() {
+            return javacSampled;
+        }
+
+        public int javacCompiled() {
+            return javacCompiled;
+        }
+
+        public int stringsDecrypted() {
+            return stringsDecrypted;
+        }
+
+        public int kotlinClasses() {
+            return kotlinClasses;
+        }
+
+        public int innerClasses() {
+            return innerClasses;
+        }
+
+        public Map<String, Integer> items() {
+            return new LinkedHashMap<>(items);
         }
 
         public Map<String, RecoveryMetrics> fileMetrics() {
-            return new HashMap<>(fileMetrics);
+            return new LinkedHashMap<>(fileMetrics);
         }
 
-        public String summary() {
-            return String.format(
-                    "Recovery: %.1f%% - %d items recovered",
-                    recoveryRate,
-                    recoveredItems.size()
-            );
+        public long durationMs() {
+            return durationMs;
         }
     }
 
@@ -175,7 +234,7 @@ public final class RecoveryPipeline {
         public RecoveryMetrics(String filePath, List<String> recoveredItems,
                                int compilationScore, boolean isValid, boolean wasRecovered) {
             this.filePath = filePath;
-            this.recoveredItems = new ArrayList<>(recoveredItems);
+            this.recoveredItems = List.copyOf(recoveredItems);
             this.compilationScore = compilationScore;
             this.isValid = isValid;
             this.wasRecovered = wasRecovered;
@@ -186,7 +245,7 @@ public final class RecoveryPipeline {
         }
 
         public List<String> recoveredItems() {
-            return new ArrayList<>(recoveredItems);
+            return recoveredItems;
         }
 
         public int compilationScore() {

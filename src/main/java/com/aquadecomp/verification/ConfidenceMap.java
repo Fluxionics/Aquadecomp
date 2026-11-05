@@ -51,12 +51,6 @@ public final class ConfidenceMap {
                 .count();
     }
 
-    public int getSmaliOnlyCount() {
-        return (int) confidence.values().stream()
-                .filter(c -> c.level() == ConfidenceLevel.SMALI_FALLBACK)
-                .count();
-    }
-
     public double getAverageScore() {
         if (confidence.isEmpty()) return 0;
         return confidence.values().stream()
@@ -65,9 +59,9 @@ public final class ConfidenceMap {
                 .orElse(0);
     }
 
-    public int getCompilableCount() {
+    public int getStructurallyValidCount() {
         return (int) confidence.values().stream()
-                .filter(ClassConfidence::compilesSuccessfully)
+                .filter(ClassConfidence::structurallyValid)
                 .count();
     }
 
@@ -93,15 +87,6 @@ public final class ConfidenceMap {
         return stats;
     }
 
-    public Map<String, Integer> getFormatStats() {
-        Map<String, Integer> stats = new HashMap<>();
-        confidence.values().forEach(c -> {
-            String format = c.sourceFormat();
-            stats.put(format, stats.getOrDefault(format, 0) + 1);
-        });
-        return stats;
-    }
-
     public ConfidenceStats getSummary() {
         return new ConfidenceStats(
                 getTotalClasses(),
@@ -110,11 +95,9 @@ public final class ConfidenceMap {
                 getAcceptableCount(),
                 getPoorCount(),
                 getUnreliableCount(),
-                getSmaliOnlyCount(),
                 getAverageScore(),
-                getCompilableCount(),
-                getDecompilerStats(),
-                getFormatStats()
+                getStructurallyValidCount(),
+                getDecompilerStats()
         );
     }
 
@@ -125,11 +108,9 @@ public final class ConfidenceMap {
             int acceptable,
             int poor,
             int unreliable,
-            int smaliOnly,
             double averageScore,
-            int compilable,
-            Map<String, Integer> decompilerStats,
-            Map<String, Integer> formatStats
+            int structurallyValid,
+            Map<String, Integer> decompilerStats
     ) {
         public double getExcellentPercentage() {
             return total == 0 ? 0 : (excellent * 100.0) / total;
@@ -140,8 +121,8 @@ public final class ConfidenceMap {
             return total == 0 ? 0 : (reliable * 100.0) / total;
         }
 
-        public double getCompilablePercentage() {
-            return total == 0 ? 0 : (compilable * 100.0) / total;
+        public double getStructurallyValidPercentage() {
+            return total == 0 ? 0 : (structurallyValid * 100.0) / total;
         }
     }
 }

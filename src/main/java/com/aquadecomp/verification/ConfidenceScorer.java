@@ -18,7 +18,7 @@ public final class ConfidenceScorer {
     private final CompilationVerifier compilationVerifier = new CompilationVerifier();
     private final SyntheticCodeDetector syntheticDetector = new SyntheticCodeDetector();
 
-    public void scoreAll(String decompilerUsed, Path sourcesDir,
+    public void scoreAll(Map<String, String> engineByFile, Path sourcesDir,
                          Map<String, RecoveryPipeline.RecoveryMetrics> recoveryMetrics,
                          PipelineListener listener) throws IOException {
         if (!Files.isDirectory(sourcesDir)) {
@@ -37,7 +37,7 @@ public final class ConfidenceScorer {
 
         for (int i = 0; i < files.size(); i++) {
             try {
-                scoreFile(files.get(i), decompilerUsed, sourcesDir, recoveryMetrics);
+                scoreFile(files.get(i), engineByFile, sourcesDir, recoveryMetrics);
             } catch (IOException ignored) {
             }
             if ((i + 1) % PROGRESS_INTERVAL == 0 || i + 1 == files.size()) {
@@ -47,10 +47,12 @@ public final class ConfidenceScorer {
         }
     }
 
-    private void scoreFile(Path file, String decompilerUsed, Path sourcesDir,
+    private void scoreFile(Path file, Map<String, String> engineByFile, Path sourcesDir,
                            Map<String, RecoveryPipeline.RecoveryMetrics> recoveryMetrics)
             throws IOException {
-        String className = extractClassName(file, sourcesDir);
+        String relative = sourcesDir.relativize(file).toString().replace('\\', '/');
+        String className = classNameOf(relative);
+        String engine = engineByFile.getOrDefault(relative, "JADX");
         String content = Files.readString(file);
 
         int score = 75;
@@ -106,16 +108,10 @@ public final class ConfidenceScorer {
             issues.add("Errores de compilación: " + compilationErrors);
         }
 
-        if (decompilerUsed.equals("CFR")) {
-            score = Math.max(score - 5, 0);
-        } else if (decompilerUsed.equals("Procyon")) {
-            score = Math.min(score + 5, 100);
-        }
-
         score = Math.max(0, Math.min(100, score));
 
         ClassConfidence cc = ClassConfidence.builder(className)
-                .decompiler(decompilerUsed)
+                .decompiler(engine)
                 .score(score)
                 .issues(issues)
                 .structurallyValid(verification.isStructurallyValid() && score > 40)
@@ -144,11 +140,9 @@ public final class ConfidenceScorer {
         return count;
     }
 
-    private String extractClassName(Path file, Path sourcesDir) {
-        Path relative = sourcesDir.relativize(file);
-        String path = relative.toString().replace('\\', '/');
-        int dot = path.lastIndexOf('.');
-        String className = dot > 0 ? path.substring(0, dot) : path;
+    private String classNameOf(String relativePath) {
+        int dot = relativePath.lastIndexOf('.');
+        String className = dot > 0 ? relativePath.substring(0, dot) : relativePath;
         return className.replace("/", ".");
     }
 

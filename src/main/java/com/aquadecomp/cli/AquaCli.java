@@ -9,13 +9,14 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 @Command(
         name = "aquedecomp",
         mixinStandardHelpOptions = true,
-        version = "Aquadecomp 0.1.0-beta (BETA)",
+        version = "Aquadecomp 1.0.0",
         description = "Descompilador de APKs con análisis de ofuscación y "
                 + "medición de efectividad del código recuperado.",
         subcommands = {
@@ -111,12 +112,17 @@ public class AquaCli implements Runnable {
         @Override
         public Integer call() {
             com.aquadecomp.core.ApkInspector inspector = new com.aquadecomp.core.ApkInspector();
+            com.aquadecomp.input.InputNormalizer.NormalizedInput input = null;
             try {
-                var structure = inspector.inspect(apk);
-                var manifest = inspector.readManifest(apk);
+                input = new com.aquadecomp.input.InputNormalizer().normalize(apk);
+                Path target = input.analysisTarget();
+                var structure = inspector.inspect(target);
+                var manifest = inspector.readManifest(target);
 
                 System.out.println("\n=== Aquadecomp inspect ===");
-                System.out.println("APK:        " + structure.apkPath());
+                System.out.println("APK:        " + apk);
+                System.out.println("Formato:    " + input.type().label
+                        + (input.isContainer() ? " (analizado sobre su APK interno)" : ""));
                 System.out.println(String.format("Tamaño:     %.2f MB",
                         structure.sizeBytes() / 1024.0 / 1024.0));
                 System.out.println("Entradas:   " + structure.entryCount());
@@ -151,6 +157,13 @@ public class AquaCli implements Runnable {
             } catch (Exception e) {
                 System.err.println("Error: " + e.getMessage());
                 return 1;
+            } finally {
+                if (input != null && input.primaryApk() != null) {
+                    try {
+                        java.nio.file.Files.deleteIfExists(input.primaryApk());
+                    } catch (IOException ignored) {
+                    }
+                }
             }
         }
     }

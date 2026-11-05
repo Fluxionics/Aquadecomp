@@ -52,7 +52,9 @@ Adaptaciones según errores detectados en el archivo
 | `/* missing */` o `/* synthetic */`       | -10       | Código faltante o generado   |
 | Patrones de error de compilación en texto | -5 a -20  | Según cantidad detectada     |
 
-**Ajuste por motor de rescate**: CFR -5, Procyon +5.
+**Motor que generó el archivo**: se registra como metadato (`JADX`, `CFR`,
+`Procyon`, `Vineflower`) y no altera el puntaje. Un archivo rescatado recibe el
+mismo tratamiento evidencial que uno generado por el motor principal.
 
 ### Fase 3: Fórmula Final
 
@@ -176,7 +178,11 @@ Severa/packeada:  predominio de No confiable
 
 ### Motor utilizado
 
-JADX es el motor principal; CFR, Procyon y Vineflower solo rescatan clases faltantes y reciben sus ajustes correspondientes.
+JADX es el motor principal; CFR, Procyon y Vineflower solo rescatan clases que
+JADX dejó sin archivo. Cada archivo conserva la etiqueta del motor que lo
+produjo (`decompiler` en el JSON, `decompilerStats` en el resumen), de modo que
+el informe dice de dónde sale cada línea de código. La etiqueta no mueve el
+puntaje: el puntaje depende de la evidencia encontrada en el propio archivo.
 
 ## Uso Recomendado
 

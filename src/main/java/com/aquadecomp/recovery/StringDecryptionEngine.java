@@ -51,6 +51,8 @@ public final class StringDecryptionEngine {
             }
             if (replacement == null) {
                 replacement = Matcher.quoteReplacement(matcher.group(0));
+            } else {
+                replacement = Matcher.quoteReplacement(replacement);
             }
             matcher.appendReplacement(sb, replacement);
         }
@@ -78,6 +80,8 @@ public final class StringDecryptionEngine {
             }
             if (replacement == null) {
                 replacement = Matcher.quoteReplacement(matcher.group(0));
+            } else {
+                replacement = Matcher.quoteReplacement(replacement);
             }
             matcher.appendReplacement(sb, replacement);
         }

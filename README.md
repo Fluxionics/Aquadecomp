@@ -37,6 +37,8 @@ Los motores de rescate reciben el APK convertido a JAR con dex2jar y solo proces
 
 **Resultado**: más clases recuperadas que con JADX solo, con el motor principal manteniendo la calidad del resto del código.
 
+El informe indica el motor que generó cada archivo: `confidence.classes[].decompiler` guarda la etiqueta por archivo y `confidence.decompilerStats` resume cuántos archivos produjo cada motor. La etiqueta es metadato, no entra en el cálculo del puntaje.
+
 ### Informe de Efectividad
 
 El flujo principal calcula un puntaje de efectividad 0-100 con cuatro dimensiones:
@@ -53,9 +55,11 @@ El paquete `verification` calcula además un puntaje por clase con niveles (Exce
 ### Soporte Multi-Formato
 
 - **.APK** - Paquetes Android estándar
-- **.AAB** - Android App Bundles
-- **.XAPK** - Paquetes expandidos
-- **.APKS** - Splits APK
+- **.AAB** - Android App Bundles: se leen los DEX en `base/dex/` y, si el manifiesto binario no existe, se usa el XML decodificado por JADX
+- **.XAPK** - Paquetes expandidos: se extrae el APK interno (`base.apk`) para inspección, manifiesto y rescate
+- **.APKS** - Splits APK: ídem con `base-master.apk`
+
+Los cuatro formatos se validan en la etapa de normalización; un archivo que no es ZIP válido, que no contiene contenido Android o que tiene una extensión desconocida se rechaza con un mensaje claro y un informe de error generado igualmente.
 
 ### Análisis Completo
 
@@ -81,6 +85,14 @@ gradle jar
 El JAR se genera en `build/libs/aquedecomp.jar`
 
 También existe el wrapper (`gradlew.bat build` en Windows, `./gradlew build` en Linux/macOS).
+
+### Pruebas
+
+```bash
+gradle test
+```
+
+La suite (JUnit 5) cubre la normalización de los cuatro formatos, entradas corruptas, la cadena de rescate con los tres motores, la proveniencia por motor, el manifiesto decodificado, el cálculo de efectividad y la escritura de reportes. Los fixtures de los formatos se regeneran con `scripts/make-fixtures.ps1` a partir de un APK pequeño.
 
 ### Ejecutable
 
@@ -194,7 +206,7 @@ Ejemplo de estructura (campos reales):
   "confidence": { "total": 6425, "averageScore": 68.0, "structurallyValid": 6146, "...": "..." },
   "recovery": { "filesProcessed": 6425, "filesModified": 0, "javacSampled": 40, "javacCompiled": 16, "...": "..." },
   "success": true,
-  "toolVersion": "0.1.0-beta"
+  "toolVersion": "1.0.0"
 }
 ```
 
@@ -283,12 +295,17 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 - RecoveryPipeline - orquestación de recuperación
 - ConfidenceScorer - puntaje por clase integrado en Pipeline
 
-### Fase 4: Optimización y Extensión (Próxima)
-- [ ] Integración con Ghidra para código nativo (.so)
-- [ ] Soporte para ProGuard/R8 mapping.txt
-- [ ] API REST para integración
-- [ ] ML-based name inference
-- [ ] Plugins de encriptación personalizada
+### 1.0.0: Estabilización (Completado)
+- Suite JUnit 5 con pruebas de normalización, entradas rotas, cadena de rescate, proveniencia por motor, manifiesto decodificado y reportes
+- Los cuatro formatos (APK, AAB, XAPK, APKS) terminan con informe correcto
+- Motor que generó cada archivo en el informe (`engineByFile`)
+- Fixtures de formatos regenerables con `scripts/make-fixtures.ps1`
+- Corridas de verificación pequeñas, medianas y grandes documentadas en `docs/VERIFICATION.md`
+
+### Funciones congeladas
+
+No se agregan motores, algoritmos ni características hasta una versión posterior.
+Los criterios de 1.0.0 y cómo comprobarlos están en [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Troubleshooting
 

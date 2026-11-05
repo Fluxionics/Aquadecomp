@@ -11,16 +11,21 @@ Aquadecomp implementa una arquitectura modular de múltiples capas que integra d
 **Responsabilidad**: Validar y clasificar el formato de entrada (APK, AAB, XAPK, APKS) antes de pasarlo al motor.
 
 **Componentes**:
-- `InputNormalizer`: Detecta tipo de entrada, valida el ZIP y cuenta los DEX
+- `InputNormalizer`: Detecta tipo de entrada, valida el ZIP, cuenta los DEX y extrae el APK interno de los contenedores
 - `ApkInspector`: Analiza estructura, detecta packers, librerías nativas y lee el manifiesto
+- `DecodedManifestReader`: Lee el manifiesto en XML decodificado cuando no existe el binario (AAB)
 
 **Formatos soportados**:
 ```
 APK (.apk)     → ZIP con classes.dex, resources
-AAB (.aab)     → Android App Bundle (JADX lo lee directamente)
-XAPK (.xapk)   → ZIP con APKs + OBB
-APKS (.apks)   → ZIP con splits APK
+AAB (.aab)     → Android App Bundle (DEX en base/dex/, manifiesto proto)
+XAPK (.xapk)   → contenedor con base.apk + manifest.json
+APKS (.apks)   → contenedor con base-master.apk
 ```
+
+Para XAPK y APKS la normalización extrae el APK interno a un archivo temporal:
+la inspección, el manifiesto y el rescate trabajan sobre ese APK y el temporal
+se borra al terminar el flujo. JADX recibe el contenedor original.
 
 **Flujo**:
 ```
@@ -34,6 +39,8 @@ NormalizedInput {
     - type: InputType
     - file: Path
     - dexEntries: int
+    - primaryApk: Path          // APK interno extraído (XAPK/APKS), o null
+    - analysisTarget(): Path     // primaryApk si existe, si no file
 }
 ```
 
@@ -194,16 +201,17 @@ Options {
   "inputType": "APK",
   "confidence": { "total", "averageScore", "structurallyValid", "excellent", "good" },
   "recovery": { "filesProcessed", "filesModified", "javacSampled", "javacCompiled" },
+  "engineByFile": { "com/example/Foo.java": "JADX", "com/example/Bar.java": "CFR" },
   "outputDir": "...",
   "success": true,
-  "toolVersion": "0.1.0-beta"
+  "toolVersion": "1.0.0"
 }
 ```
 
 #### Markdown Report
 - Efectividad global y desglose por dimensión
 - Recuperación de código
-- Confianza por clase
+- Confianza por clase, con el resumen de motores
 - Fortalezas, limitaciones y metodología
 
 ## Modelo de Datos
@@ -213,13 +221,15 @@ Options {
 ```java
 record ClassConfidence(
     String className,           // Ej: com.signal.MainActivity
-    String decompilerUsed,      // "JADX"
+    String decompilerUsed,      // Motor que generó el archivo: "JADX", "CFR", ...
     ConfidenceLevel level,      // EXCELLENT, GOOD, etc.
     int score,                  // 0-100
     List<String> issues,        // ["JADX warning", ...]
     boolean structurallyValid   // heurística de estructura
 )
 ```
+
+La etiqueta de motor es metadato: no entra en el cálculo del puntaje.
 
 ### PipelineResult (Resultado Final)
 
@@ -233,6 +243,7 @@ record PipelineResult(
     String inputType,
     ConfidenceMap.ConfidenceStats confidence,
     RecoveryReport recovery,
+    Map<String, String> engineByFile,  // ruta en sources/ → motor
     String outputDir,
     boolean success,
     String errorMessage,

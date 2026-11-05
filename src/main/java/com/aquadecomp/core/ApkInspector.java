@@ -72,20 +72,19 @@ public final class ApkInspector {
                 String name = e.getName();
                 String lower = name.toLowerCase(Locale.ROOT);
 
-                if (lower.endsWith(".dex")) {
-                    if (!name.contains("/")) {
-                        dexFiles.add(name);
-                    } else {
-
-                        warnings.add("DEX fuera de la raíz del ZIP: " + name);
-                    }
-                } else if (lower.startsWith("lib/") && lower.endsWith(".so")) {
-                    nativeLibs.add(name);
-                } else if (lower.startsWith("assets/")) {
+                if (lower.startsWith("assets/")) {
                     assetEntries.add(name);
                     if (lower.endsWith(".dex") || lower.endsWith(".jar")) {
                         warnings.add("Ejecutable embebido en assets: " + name);
                     }
+                } else if (lower.endsWith(".dex")) {
+                    if (!name.contains("/") || lower.contains("/dex/")) {
+                        dexFiles.add(name);
+                    } else {
+                        warnings.add("DEX fuera de la raíz del ZIP: " + name);
+                    }
+                } else if (lower.startsWith("lib/") && lower.endsWith(".so")) {
+                    nativeLibs.add(name);
                 } else if (name.equals("AndroidManifest.xml")) {
                     hasManifest = true;
                 } else if (name.equals("resources.arsc")) {

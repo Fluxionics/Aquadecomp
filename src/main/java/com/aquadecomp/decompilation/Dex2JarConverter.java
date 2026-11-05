@@ -47,10 +47,12 @@ public final class Dex2JarConverter {
         return jar;
     }
 
-    private static boolean isDexEntry(String name) {
-        if (name.indexOf('/') >= 0 || !name.endsWith(".dex")) {
+    static boolean isDexEntry(String name) {
+        int slash = name.lastIndexOf('/');
+        String base = slash < 0 ? name : name.substring(slash + 1);
+        if (slash >= 0 && !name.contains("/dex/")) {
             return false;
         }
-        return name.equals("classes.dex") || name.matches("classes\\d+\\.dex");
+        return base.equals("classes.dex") || base.matches("classes\\d+\\.dex");
     }
 }

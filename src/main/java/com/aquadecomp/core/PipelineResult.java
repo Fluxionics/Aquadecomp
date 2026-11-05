@@ -13,6 +13,7 @@ public record PipelineResult(
         String inputType,
         ConfidenceMap.ConfidenceStats confidence,
         RecoveryReport recovery,
+        Map<String, String> engineByFile,
         String outputDir,
         boolean success,
         String errorMessage,
@@ -38,6 +39,6 @@ public record PipelineResult(
                 DecompileStats.empty(),
                 EffectivenessReport.unknown(error),
                 null, null, null,
-                outputDir, false, error, version);
+                Map.of(), outputDir, false, error, version);
     }
 }

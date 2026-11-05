@@ -18,12 +18,14 @@ public final class ReportWriter {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public static Path writeJson(PipelineResult result, Path outDir) throws IOException {
+        Files.createDirectories(outDir);
         Path file = outDir.resolve("aquedecomp-report.json");
         Files.writeString(file, GSON.toJson(result), StandardCharsets.UTF_8);
         return file;
     }
 
     public static Path writeMarkdown(PipelineResult result, Path outDir) throws IOException {
+        Files.createDirectories(outDir);
         Path file = outDir.resolve("aquedecomp-report.md");
         Files.writeString(file, markdown(result), StandardCharsets.UTF_8);
         return file;
@@ -79,7 +81,22 @@ public final class ReportWriter {
         sb.append(String.format(Locale.ROOT,
                 "- Estructura válida (heurística, no compilación real): %d/%d (%.1f%%)%n",
                 c.structurallyValid(), c.total(), c.getStructurallyValidPercentage()));
+        sb.append("- Motor que generó cada archivo: ").append(engineBreakdown(c)).append('\n');
         sb.append('\n');
+    }
+
+    public static String engineBreakdown(ConfidenceMap.ConfidenceStats c) {
+        if (c == null || c.decompilerStats().isEmpty()) {
+            return "sin datos";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Integer> e : c.enginesOrdered()) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(e.getKey()).append(' ').append(e.getValue());
+        }
+        return sb.toString();
     }
 
     static String markdown(PipelineResult r) {
@@ -187,6 +204,7 @@ public final class ReportWriter {
             sb.append(String.format(Locale.ROOT,
                     "Confianza media: %.1f/100 (%d clases)%n",
                     r.confidence().averageScore(), r.confidence().total()));
+            sb.append("Motor por archivo: ").append(engineBreakdown(r.confidence())).append('\n');
         }
         if (r.recovery() != null) {
             sb.append(String.format(Locale.ROOT,

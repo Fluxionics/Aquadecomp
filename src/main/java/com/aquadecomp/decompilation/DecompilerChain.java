@@ -8,9 +8,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -54,11 +56,12 @@ public final class DecompilerChain {
 
         if (primaryOk && primaryErrors == 0) {
             return new ChainResult(true, sourcesDir, resourcesDir, primary.name(),
-                    attempts, primaryClasses, 0);
+                    attempts, primaryClasses, 0, Map.of());
         }
 
         int rescued = 0;
         String engineSummary = "";
+        Map<String, String> engineByFile = new LinkedHashMap<>();
         Path work = createWorkDir();
         try {
             Path jar = Dex2JarConverter.convert(apk, work);
@@ -71,6 +74,7 @@ public final class DecompilerChain {
                         }, attempts);
                 rescued = outcome.rescued();
                 engineSummary = outcome.summary();
+                engineByFile.putAll(outcome.engineByFile());
             }
         } catch (Throwable t) {
             String msg = t.getClass().getSimpleName() + ": " + t.getMessage();
@@ -87,7 +91,7 @@ public final class DecompilerChain {
             selected = null;
         }
         return new ChainResult(success, sourcesDir, resourcesDir, selected,
-                attempts, Math.max(primaryClasses, rescued), rescued);
+                attempts, Math.max(primaryClasses, rescued), rescued, engineByFile);
     }
 
     public ChainResult rescue(Path apk, Path outputDir, Set<String> missing,
@@ -97,7 +101,7 @@ public final class DecompilerChain {
         Path resourcesDir = outputDir.resolve("resources");
         if (missing.isEmpty()) {
             return new ChainResult(true, sourcesDir, resourcesDir, null,
-                    attempts, 0, 0);
+                    attempts, 0, 0, Map.of());
         }
         Path work = createWorkDir();
         try {
@@ -108,13 +112,13 @@ public final class DecompilerChain {
             boolean success = outcome.rescued() > 0;
             return new ChainResult(success, sourcesDir, resourcesDir,
                     success ? outcome.summary() : null, attempts,
-                    missing.size(), outcome.rescued());
+                    missing.size(), outcome.rescued(), outcome.engineByFile());
         } catch (Throwable t) {
             String msg = t.getClass().getSimpleName() + ": " + t.getMessage();
             attempts.add(new AttemptResult("dex2jar", false, 0, msg));
             log.accept("dex2jar no pudo convertir el APK: " + msg);
             return new ChainResult(false, sourcesDir, resourcesDir, null,
-                    attempts, missing.size(), 0);
+                    attempts, missing.size(), 0, Map.of());
         } finally {
             deleteTree(work);
         }
@@ -128,12 +132,13 @@ public final class DecompilerChain {
             Files.createDirectories(sourcesDir);
         } catch (IOException e) {
             attempts.add(new AttemptResult("salida", false, 0, e.getMessage()));
-            return new RescueOutcome(0, "");
+            return new RescueOutcome(0, "", Map.of());
         }
 
         Set<String> remaining = new LinkedHashSet<>(missing);
         int rescued = 0;
         List<String> parts = new ArrayList<>();
+        Map<String, String> engineByFile = new LinkedHashMap<>();
 
         for (DecompilerStrategy engine : engines) {
             if (remaining.isEmpty()) {
@@ -146,7 +151,7 @@ public final class DecompilerChain {
             Path staging = work.resolve("rescate_" + engine.name().toLowerCase(Locale.ROOT));
             try {
                 Set<String> produced = engine.rescue(jar, staging, remaining, config);
-                int merged = merge(produced, staging, sourcesDir);
+                int merged = merge(produced, staging, sourcesDir, engine.name(), engineByFile);
                 if (merged > 0) {
                     rescued += merged;
                     for (String name : produced) {
@@ -168,10 +173,11 @@ public final class DecompilerChain {
         if (!remaining.isEmpty()) {
             log.accept("Clases sin rescatar: " + remaining.size());
         }
-        return new RescueOutcome(rescued, String.join(", ", parts));
+        return new RescueOutcome(rescued, String.join(", ", parts), engineByFile);
     }
 
-    private int merge(Set<String> produced, Path staging, Path sourcesDir) {
+    private int merge(Set<String> produced, Path staging, Path sourcesDir,
+                      String engineName, Map<String, String> engineByFile) {
         int merged = 0;
         for (String name : produced) {
             String relative = name.replace('.', '/') + ".java";
@@ -187,6 +193,7 @@ public final class DecompilerChain {
                 Files.createDirectories(to.getParent());
                 Files.move(from, to);
                 merged++;
+                engineByFile.put(relative, engineName);
             } catch (IOException ignored) {
             }
         }
@@ -282,7 +289,7 @@ public final class DecompilerChain {
         }
     }
 
-    private record RescueOutcome(int rescued, String summary) {
+    private record RescueOutcome(int rescued, String summary, Map<String, String> engineByFile) {
     }
 
     public record AttemptResult(
@@ -300,7 +307,8 @@ public final class DecompilerChain {
             String selectedDecompiler,
             List<AttemptResult> attempts,
             int bestClassCount,
-            int rescuedCount
+            int rescuedCount,
+            Map<String, String> engineByFile
     ) {
         public boolean hasSucceeded() {
             return success && sourcesDir != null;

@@ -11,8 +11,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
@@ -26,7 +28,8 @@ public final class DecompileEngine {
     }
 
     public record EngineOutput(DecompileStats stats, ObfuscationInfo obfuscation,
-                               Path sourcesDir, Path resourcesDir, boolean stringEncryptionSuspected) {
+                               Path sourcesDir, Path resourcesDir, boolean stringEncryptionSuspected,
+                               Map<String, String> engineByFile) {
     }
 
     private static final String ENCRYPT_PATTERNS = """
@@ -34,7 +37,7 @@ public final class DecompileEngine {
             javax.crypto.spec.SecretKeySpec,java.security.MessageDigest,\
             javax.crypto.spec.IvParameterSpec""";
 
-    public EngineOutput decompile(Path apk, Path outDir, Options opts,
+    public EngineOutput decompile(Path apk, Path rescueFrom, Path outDir, Options opts,
                                   PipelineListener listener) throws IOException {
         listener.onStage("PREPARANDO DESCOMPILADOR");
         listener.onProgress(5, "Configurando motor (" + apk.getFileName() + ")");
@@ -112,18 +115,20 @@ public final class DecompileEngine {
             }
             System.gc();
 
+            Map<String, String> engineByFile = new LinkedHashMap<>();
             if (!missing.isEmpty()) {
                 listener.onStage("RESCATANDO CLASES");
                 listener.onLog("JADX dejo " + missing.size()
                         + " clases sin archivo; probando CFR, Procyon y Vineflower");
                 try {
                     DecompilerChain chain = new DecompilerChain();
-                    DecompilerChain.ChainResult rescue = chain.rescue(apk, outDir, missing,
+                    DecompilerChain.ChainResult rescue = chain.rescue(rescueFrom, outDir, missing,
                             new DecompilerStrategy.DecompilerConfig(
                                     opts.deobfuscate(), opts.includeResources(),
                                     opts.threads(), true),
                             listener::onLog);
                     if (rescue.rescuedCount() > 0) {
+                        engineByFile.putAll(rescue.engineByFile());
                         listener.onLog("Clases rescatadas: " + rescue.rescuedCount()
                                 + "/" + missing.size() + " (" + rescue.selectedDecompiler() + ")");
                     } else {
@@ -165,7 +170,7 @@ public final class DecompileEngine {
             listener.onProgress(97, "Descompilación terminada en "
                     + String.format("%.1f", duration / 1000.0) + "s");
 
-            return new EngineOutput(stats, finalObf, srcDir, resDir, stringEnc);
+            return new EngineOutput(stats, finalObf, srcDir, resDir, stringEnc, engineByFile);
         }
     }
 

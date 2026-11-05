@@ -124,5 +124,13 @@ public final class ConfidenceMap {
         public double getStructurallyValidPercentage() {
             return total == 0 ? 0 : (structurallyValid * 100.0) / total;
         }
+
+        public List<Map.Entry<String, Integer>> enginesOrdered() {
+            return decompilerStats.entrySet().stream()
+                    .sorted((a, b) -> b.getValue() != a.getValue()
+                            ? Integer.compare(b.getValue(), a.getValue())
+                            : a.getKey().compareTo(b.getKey()))
+                    .toList();
+        }
     }
 }

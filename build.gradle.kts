@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.aquadecomp"
-version = "0.1.0-beta"
+version = "1.0.0"
 
 java {
     toolchain {
@@ -34,6 +34,10 @@ dependencies {
     
     implementation("org.slf4j:slf4j-api:2.0.9")
     implementation("ch.qos.logback:logback-classic:1.4.14")
+
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 application {
@@ -60,4 +64,11 @@ tasks.jar {
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.compilerArgs.add("-parameters")
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "failed", "skipped")
+    }
 }

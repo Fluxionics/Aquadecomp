@@ -8,11 +8,14 @@ import com.aquadecomp.verification.ConfidenceScorer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Stream;
 
 public final class Pipeline {
 
-    public static final String VERSION = "0.1.0-beta";
+    public static final String VERSION = "1.0.0";
 
     public record Options(Path apk, Path outputDir, boolean deobfuscate,
                           boolean includeResources, int threads) {
@@ -26,6 +29,7 @@ public final class Pipeline {
         long start = System.currentTimeMillis();
         Path apk = opts.apk();
         Path out = opts.outputDir();
+        InputNormalizer.NormalizedInput input = null;
 
         try {
             if (!Files.isRegularFile(apk)) {
@@ -35,11 +39,11 @@ public final class Pipeline {
 
             listener.onStage("NORMALIZANDO ENTRADA");
             listener.onProgress(1, "Validando formato de entrada");
-            InputNormalizer.NormalizedInput input = new InputNormalizer().normalize(apk);
+            input = new InputNormalizer().normalize(apk);
             listener.onLog("Formato: " + input.type().label
                     + " (" + input.type().description + ")");
             if (input.isContainer()) {
-                listener.onLog("Contenedor: el motor leerá los APK internos del paquete");
+                listener.onLog("Contenedor: se analiza el APK interno del paquete");
             } else {
                 listener.onLog("DEX en el paquete: " + input.dexEntries());
             }
@@ -48,7 +52,7 @@ public final class Pipeline {
 
             listener.onStage("INSPECCIONANDO APK");
             listener.onProgress(2, "Leyendo estructura ZIP");
-            ApkStructure structure = inspector.inspect(input.file());
+            ApkStructure structure = inspector.inspect(input.analysisTarget());
             listener.onLog("Entradas: " + structure.entryCount()
                     + " | DEX: " + structure.dexFiles().size()
                     + " | Libs nativas: " + structure.nativeLibs().size());
@@ -60,7 +64,7 @@ public final class Pipeline {
 
             listener.onStage("DECODIFICANDO MANIFIESTO");
             listener.onProgress(6, "AndroidManifest.xml binario");
-            ManifestInfo manifest = inspector.readManifest(input.file());
+            ManifestInfo manifest = inspector.readManifest(input.analysisTarget());
             if (manifest.parsedOk()) {
                 listener.onLog("Paquete: " + manifest.packageName()
                         + (manifest.versionName() != null ? " v" + manifest.versionName() : ""));
@@ -74,7 +78,17 @@ public final class Pipeline {
             DecompileEngine.Options engineOpts = new DecompileEngine.Options(
                     opts.deobfuscate(), opts.includeResources(), opts.threads());
             DecompileEngine.EngineOutput output = engine.decompile(
-                    input.file(), out, engineOpts, listener);
+                    input.file(), input.analysisTarget(), out, engineOpts, listener);
+
+            if (!manifest.parsedOk()) {
+                ManifestInfo decoded = DecodedManifestReader.read(
+                        out.resolve("resources").resolve("AndroidManifest.xml"));
+                if (decoded.parsedOk()) {
+                    manifest = decoded;
+                    listener.onLog("Manifiesto leído del XML decodificado: paquete "
+                            + decoded.packageName());
+                }
+            }
 
             listener.onStage("RECUPERANDO CÓDIGO");
             listener.onProgress(97, "Descifrando cadenas y analizando clases");
@@ -98,12 +112,15 @@ public final class Pipeline {
 
             listener.onStage("PUNTUANDO CONFIANZA");
             listener.onProgress(98, "Analizando cada clase");
+            Map<String, String> engineByFile = completeEngineMap(
+                    output.sourcesDir(), output.engineByFile());
             ConfidenceScorer scorer = new ConfidenceScorer();
-            scorer.scoreAll("JADX", output.sourcesDir(), rec.fileMetrics(), listener);
+            scorer.scoreAll(engineByFile, output.sourcesDir(), rec.fileMetrics(), listener);
             ConfidenceMap.ConfidenceStats confidence = scorer.getSummary();
             listener.onLog("Clases puntuadas: " + confidence.total()
                     + " | media: " + String.format(Locale.ROOT, "%.1f", confidence.averageScore())
                     + " | estructura válida: " + confidence.structurallyValid());
+            listener.onLog("Motor por archivo: " + ReportWriter.engineBreakdown(confidence));
 
             listener.onStage("CALCULANDO EFECTIVIDAD");
             listener.onProgress(99, "Aplicando metodología");
@@ -127,7 +144,7 @@ public final class Pipeline {
             listener.onProgress(100, "Listo");
 
             return new PipelineResult(structure, manifest, output.obfuscation(), stats,
-                    eff, input.type().label, confidence, recoveryReport,
+                    eff, input.type().label, confidence, recoveryReport, engineByFile,
                     out.toAbsolutePath().toString(), true, null, VERSION);
         } catch (IOException e) {
             return PipelineResult.failed(apk.toString(), out.toString(),
@@ -141,6 +158,37 @@ public final class Pipeline {
                 msg = t.getClass().getSimpleName() + ": " + t.getMessage();
             }
             return PipelineResult.failed(apk.toString(), out.toString(), msg, VERSION);
+        } finally {
+            deleteExtracted(input);
         }
+    }
+
+    private static void deleteExtracted(InputNormalizer.NormalizedInput input) {
+        if (input == null || input.primaryApk() == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(input.primaryApk());
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static Map<String, String> completeEngineMap(Path sourcesDir,
+                                                         Map<String, String> rescued) {
+        Map<String, String> all = new LinkedHashMap<>();
+        if (Files.isDirectory(sourcesDir)) {
+            try (Stream<Path> walk = Files.walk(sourcesDir)) {
+                walk.filter(Files::isRegularFile)
+                        .filter(p -> p.toString().endsWith(".java"))
+                        .forEach(p -> {
+                            String relative = sourcesDir.relativize(p)
+                                    .toString().replace('\\', '/');
+                            all.put(relative, "JADX");
+                        });
+            } catch (IOException ignored) {
+            }
+        }
+        all.putAll(rescued);
+        return all;
     }
 }

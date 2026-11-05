@@ -36,6 +36,7 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Verificación de sintaxis
   - Detección de código sintético
   - Niveles (Excelente/Bueno/Aceptable/Pobre/No confiable)
+- [Verificación (VERIFICATION.md)](VERIFICATION.md) - criterios de 1.0.0, comandos reproducibles y matriz de resultados
 
 ## Estructura del Proyecto
 
@@ -45,12 +46,14 @@ Aquadecomp/
 ├── QUICK_START.md             Primeros pasos
 ├── build.gradle.kts           Configuración Gradle
 ├── libs/jadx/                 JADX 1.5.6 (motor principal)
+├── scripts/                   Regeneración de fixtures (make-fixtures, make-aab)
 ├── docs/                      Esta documentación
 │   ├── INDEX.md
 │   ├── ARCHITECTURE.md
 │   ├── USAGE.md
 │   ├── RECOVERY_ENGINES.md
-│   └── CONFIDENCE_SCORING.md
+│   ├── CONFIDENCE_SCORING.md
+│   └── VERIFICATION.md
 ├── src/main/java/com/aquadecomp/
 │   ├── Aquadecomp.java        Punto de entrada
 │   ├── cli/                   Interfaz de línea de comandos
@@ -95,4 +98,8 @@ APK/AAB/XAPK/APKS
 - **Fase 1**: Motor principal y CLI (completado)
 - **Fase 2**: Cadena de respaldo multi-motor (completado)
 - **Fase 3**: Recuperación y confianza conectadas al flujo (completado)
-- **Fase 4**: Optimización y extensión (próxima) - ver [README.md](../README.md)
+- **1.0.0**: estabilización, pruebas automatizadas y verificación de los cuatro formatos (completado)
+
+Las funciones nuevas están congeladas: no hay motores, algoritmos ni
+características agregados hasta una versión posterior. El estado de los siete
+criterios de 1.0.0 está en [VERIFICATION.md](VERIFICATION.md).

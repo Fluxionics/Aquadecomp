@@ -2,8 +2,10 @@ package com.aquadecomp.input;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -63,7 +65,35 @@ public final class InputNormalizer {
         }
 
         int dexEntries = countDexEntries(inputFile);
-        return new NormalizedInput(type, inputFile.toAbsolutePath().normalize(), dexEntries);
+        Path primaryApk = extractPrimaryApk(inputFile, type);
+        return new NormalizedInput(type, inputFile.toAbsolutePath().normalize(),
+                dexEntries, primaryApk);
+    }
+
+    private Path extractPrimaryApk(Path file, InputType type) throws IOException {
+        if (type != InputType.XAPK && type != InputType.APKS) {
+            return null;
+        }
+        String preferred = type == InputType.XAPK ? "base.apk" : "base-master.apk";
+        try (ZipFile zip = new ZipFile(file.toFile())) {
+            ZipEntry chosen = zip.getEntry(preferred);
+            if (chosen == null) {
+                var candidate = zip.stream()
+                        .filter(e -> !e.isDirectory()
+                                && e.getName().toLowerCase(Locale.ROOT).endsWith(".apk"))
+                        .findFirst();
+                if (candidate.isEmpty()) {
+                    return null;
+                }
+                chosen = candidate.get();
+            }
+            Path temp = Files.createTempFile("aquedecomp-interno", ".apk");
+            try (InputStream in = zip.getInputStream(chosen);
+                 OutputStream out = Files.newOutputStream(temp)) {
+                in.transferTo(out);
+            }
+            return temp;
+        }
     }
 
     private boolean isZip(Path file) {
@@ -108,9 +138,13 @@ public final class InputNormalizer {
         return base.startsWith("classes") && base.endsWith(".dex");
     }
 
-    public record NormalizedInput(InputType type, Path file, int dexEntries) {
+    public record NormalizedInput(InputType type, Path file, int dexEntries, Path primaryApk) {
         public boolean isContainer() {
             return type == InputType.XAPK || type == InputType.APKS;
+        }
+
+        public Path analysisTarget() {
+            return primaryApk != null ? primaryApk : file;
         }
     }
 }

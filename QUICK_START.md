@@ -108,6 +108,8 @@ java -jar build/libs/aquedecomp.jar gui
 - `obfuscation.level` alto = probablemente protegido
 - `confidence.averageScore` = confianza media por clase
 - `recovery` = qué hizo la etapa de recuperación
+- `inputType` = formato detectado (APK, AAB, XAPK o APKS)
+- `engineByFile` = qué motor generó cada archivo de `sources/`
 
 ### Reporte Markdown
 

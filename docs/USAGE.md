@@ -79,6 +79,18 @@ java -jar aquedecomp.jar decompile app.apk -o ./results \
     --quiet
 ```
 
+**Formatos de entrada**:
+
+| Formato | Cómo lo procesa |
+|---------|-----------------|
+| `.apk` | Directo: estructura, manifiesto binario y DEX en la raíz |
+| `.xapk` | Extrae `base.apk` a un archivo temporal para inspección, manifiesto y rescate |
+| `.apks` | Ídem con `base-master.apk` |
+| `.aab` | Lee los DEX en `base/dex/`; sin manifiesto binario usa el XML decodificado por JADX |
+
+El campo `inputType` del informe indica el formato detectado; un archivo que no
+es un paquete Android válido se rechaza en la etapa de normalización.
+
 #### `inspect`
 
 Solo inspecciona el APK (estructura, manifiesto, permisos, packers) sin descompilar.
@@ -287,7 +299,7 @@ Estructura (serialización Gson de `PipelineResult`):
     "unreliable": 260,
     "averageScore": 68.0,
     "structurallyValid": 6146,
-    "decompilerStats": { "JADX": 6425 }
+    "decompilerStats": { "JADX": 6360, "CFR": 63, "Procyon": 2 }
   },
   "recovery": {
     "filesProcessed": 6425,
@@ -299,10 +311,14 @@ Estructura (serialización Gson de `PipelineResult`):
     "items": {},
     "durationMs": 209043
   },
+  "engineByFile": {
+    "com/soundcloud/android/App.java": "JADX",
+    "com/soundcloud/android/Falta.java": "CFR"
+  },
   "outputDir": "./output",
   "success": true,
   "errorMessage": null,
-  "toolVersion": "0.1.0-beta"
+  "toolVersion": "1.0.0"
 }
 ```
 
@@ -316,7 +332,7 @@ Ejemplo (generado por `ReportWriter.markdown`):
 - **Fecha:** 2026-11-04T13:05:00Z
 - **APK:** C:/apk-work/app.apk
 - **Tamaño:** 50.91 MB
-- **Versión Aquadecomp:** 0.1.0-beta
+- **Versión Aquadecomp:** 1.0.0
 - **Entrada:** APK
 
 ## Efectividad global: 78.5/100
@@ -379,6 +395,7 @@ Ejemplo (generado por `ReportWriter.markdown`):
 - Puntaje medio: 68.0/100
 - Fiables (excelente + bueno + aceptable): 81.0%
 - Estructura válida (heurística, no compilación real): 6146/6425 (95.7%)
+- Motor que generó cada archivo: JADX 6360, CFR 63, Procyon 2
 
 ## Fortalezas
 

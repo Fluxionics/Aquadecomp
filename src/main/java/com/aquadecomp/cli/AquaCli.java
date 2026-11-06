@@ -56,6 +56,10 @@ public class AquaCli implements Runnable {
         @Option(names = "--no-deobf", description = "Desactivar la desofuscación de nombres")
         boolean noDeobf;
 
+        @Option(names = "--mapping", paramLabel = "FILE",
+                description = "mapping.txt de ProGuard/R8 para restaurar nombres originales")
+        Path mapping;
+
         @Option(names = "--no-resources", description = "No extraer recursos (solo código Java)")
         boolean noResources;
 
@@ -79,7 +83,8 @@ public class AquaCli implements Runnable {
 
             PipelineListener listener = quiet ? PipelineListener.SILENT : PipelineListener.CONSOLE;
             Pipeline pipeline = new Pipeline();
-            Pipeline.Options opts = new Pipeline.Options(apk, output, !noDeobf, !noResources, threads);
+            Pipeline.Options opts = new Pipeline.Options(apk, output, !noDeobf,
+                    !noResources, threads, mapping);
 
             PipelineResult result = pipeline.run(opts, listener);
 
@@ -138,6 +143,10 @@ public class AquaCli implements Runnable {
                 description = "API mínima del dex generado (por defecto: 21)")
         int minApi = 21;
 
+        @Option(names = "--mapping", paramLabel = "FILE",
+                description = "mapping.txt (por defecto: aquedecomp-mapping.txt de la descompilación)")
+        Path mapping;
+
         @Option(names = {"-q", "--quiet"}, description = "Solo mostrar el resumen final")
         boolean quiet;
 
@@ -146,7 +155,7 @@ public class AquaCli implements Runnable {
             PipelineListener listener = quiet ? PipelineListener.SILENT : PipelineListener.CONSOLE;
             RebuildPipeline.Options opts = new RebuildPipeline.Options(
                     dir, original, out, androidJar,
-                    archivos != null ? archivos : List.of(), app, minApi);
+                    archivos != null ? archivos : List.of(), app, minApi, mapping);
             RebuildReport report = new RebuildPipeline().run(opts, listener);
             System.out.println(report.consoleSummary());
             return report.success() ? 0 : 1;

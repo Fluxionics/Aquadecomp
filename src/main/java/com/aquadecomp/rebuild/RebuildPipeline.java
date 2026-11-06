@@ -3,6 +3,9 @@ package com.aquadecomp.rebuild;
 import com.aquadecomp.core.ObfuscationDetector;
 import com.aquadecomp.core.PipelineListener;
 import com.aquadecomp.decompilation.Dex2JarConverter;
+import com.aquadecomp.mapping.DexMappingRewriter;
+import com.aquadecomp.mapping.MappingApplier;
+import com.aquadecomp.mapping.MappingFile;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -20,9 +23,16 @@ import java.util.stream.Stream;
 public final class RebuildPipeline {
 
     public record Options(Path decompileDir, Path originalApk, Path outputApk,
-                          Path androidJar, List<String> files, boolean wholeApp, int minApi) {
+                          Path androidJar, List<String> files, boolean wholeApp, int minApi,
+                          Path mapping) {
+        public Options(Path decompileDir, Path originalApk, Path outputApk,
+                       Path androidJar, List<String> files, boolean wholeApp, int minApi) {
+            this(decompileDir, originalApk, outputApk, androidJar, files, wholeApp,
+                    minApi, null);
+        }
+
         public static Options of(Path decompileDir) {
-            return new Options(decompileDir, null, null, null, List.of(), false, 21);
+            return new Options(decompileDir, null, null, null, List.of(), false, 21, null);
         }
     }
 
@@ -51,6 +61,12 @@ public final class RebuildPipeline {
             original = resolveOriginal(opts);
             rejectRenamedOutput(opts.decompileDir());
 
+            MappingFile mapping = loadMapping(opts);
+            if (mapping != null) {
+                listener.onLog("Mapping: " + mapping.classCount() + " clases, "
+                        + mapping.memberCount() + " miembros");
+            }
+
             mode = decideMode(opts, sources);
             List<Path> units = unitsFor(mode, sources, opts);
             sourceCount = units.size();
@@ -67,8 +83,16 @@ public final class RebuildPipeline {
             }
 
             Path originalJar = null;
+            Path classpathApk = original;
+            if (mapping != null) {
+                classpathApk = work.resolve("original-restaurado.apk");
+                MappingApplier.Applied restored =
+                        MappingApplier.apply(original, mapping, classpathApk);
+                listener.onLog("Classpath restaurado desde el mapping: "
+                        + restored.classes() + " clases, " + restored.members() + " miembros");
+            }
             try {
-                originalJar = Dex2JarConverter.convert(original, work.resolve("origen"));
+                originalJar = Dex2JarConverter.convert(classpathApk, work.resolve("origen"));
             } catch (IOException e) {
                 if (!MODE_FULL.equals(mode)) {
                     throw new IOException("No se pudieron extraer las clases originales del APK "
@@ -97,12 +121,37 @@ public final class RebuildPipeline {
                     + compiled.classCount() + " clases");
 
             Set<String> classNames = classNamesUnder(classesDir);
+            MappingFile.RenameTable forward = mapping != null
+                    ? mapping.renameTable(MappingFile.Direction.FORWARD) : null;
+            if (forward != null) {
+                classNames = classNames.stream()
+                        .map(name -> obfuscatedName(forward, name))
+                        .collect(java.util.stream.Collectors.toSet());
+            }
 
             listener.onStage("GENERANDO DEX (d8)");
             listener.onProgress(65, "convirtiendo " + compiled.classCount() + " clases a dex");
             Path programJar = DexBuilder.jarClasses(classesDir, work.resolve("compiladas.jar"));
             List<Path> dexes = DexBuilder.build(programJar, android, work.resolve("dex"),
                     opts.minApi());
+            if (forward != null) {
+                listener.onStage("APLICANDO MAPPING AL DEX");
+                Path mappedDir = work.resolve("dex-mapeado");
+                Files.createDirectories(mappedDir);
+                List<Path> mappedDexes = new ArrayList<>();
+                int renamed = 0;
+                for (Path dex : dexes) {
+                    DexMappingRewriter.Result result =
+                            DexMappingRewriter.rewrite(Files.readAllBytes(dex), forward);
+                    Path target = mappedDir.resolve(dex.getFileName().toString());
+                    Files.write(target, result.dex());
+                    mappedDexes.add(target);
+                    renamed += result.classes();
+                }
+                dexes = mappedDexes;
+                listener.onLog("Dex recompilado renombrado a los nombres del APK original: "
+                        + renamed + " clases");
+            }
 
             listener.onStage("EMPACETANDO APK");
             listener.onProgress(85, "reemplazando dex en el APK original");
@@ -152,6 +201,11 @@ public final class RebuildPipeline {
             if (MODE_EDITED.equals(mode)) {
                 warnings.add("Se reemplazaron solo " + replacedCount
                         + " clases recompiladas; el resto del bytecode proviene del APK original");
+            }
+            if (mapping != null) {
+                warnings.add("Se aplicó mapping.txt: los nombres originales se restauraron "
+                        + "para compilar y el dex recompilado se renombró a los nombres "
+                        + "del APK original");
             }
 
             RebuildReport report = new RebuildReport(true, mode, original.toString(),
@@ -218,6 +272,32 @@ public final class RebuildPipeline {
                     + "ejecutarse. Descompila de nuevo sin desofuscación: "
                     + "java -jar aquedecomp.jar decompile <apk> -o <salida> --no-deobf");
         }
+    }
+
+    private static MappingFile loadMapping(Options opts) throws IOException {
+        Path file = opts.mapping();
+        if (file == null) {
+            Path candidate = opts.decompileDir().resolve(MappingFile.COPIED_NAME);
+            if (Files.isRegularFile(candidate)) {
+                file = candidate;
+            }
+        }
+        if (file == null) {
+            return null;
+        }
+        if (!Files.isRegularFile(file)) {
+            throw new IOException("No existe el mapping indicado: " + file);
+        }
+        return MappingFile.parse(file);
+    }
+
+    private static String obfuscatedName(MappingFile.RenameTable forward, String original) {
+        String descriptor = "L" + original.replace('.', '/') + ";";
+        String renamed = forward.types().get(descriptor);
+        if (renamed == null) {
+            return original;
+        }
+        return renamed.substring(1, renamed.length() - 1).replace('/', '.');
     }
 
     private static String decideMode(Options opts, Path sources) throws IOException {

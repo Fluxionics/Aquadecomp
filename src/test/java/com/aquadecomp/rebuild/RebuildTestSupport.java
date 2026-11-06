@@ -9,12 +9,12 @@ import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-final class RebuildTestSupport {
+public final class RebuildTestSupport {
 
     private RebuildTestSupport() {
     }
 
-    static Path compileSource(Path dir, String fileName, String source) throws IOException {
+    public static Path compileSource(Path dir, String fileName, String source) throws IOException {
         Path srcDir = dir.resolve("src");
         Files.createDirectories(srcDir);
         Path src = srcDir.resolve(fileName);
@@ -28,13 +28,13 @@ final class RebuildTestSupport {
         return classes;
     }
 
-    static Path buildDex(Path classesDir, Path workDir) throws IOException {
+    public static Path buildDex(Path classesDir, Path workDir) throws IOException {
         Path jar = DexBuilder.jarClasses(classesDir, workDir.resolve("programa.jar"));
         List<Path> dexes = DexBuilder.build(jar, null, workDir.resolve("dex"), 21);
         return dexes.get(0);
     }
 
-    static Path apkWith(Path apkFile, String... nameContentPairs) throws IOException {
+    public static Path apkWith(Path apkFile, String... nameContentPairs) throws IOException {
         try (OutputStream fos = Files.newOutputStream(apkFile);
              ZipOutputStream zip = new ZipOutputStream(fos)) {
             for (int i = 0; i < nameContentPairs.length; i += 2) {
@@ -46,7 +46,7 @@ final class RebuildTestSupport {
         return apkFile;
     }
 
-    static Path apkWithDex(Path apkFile, Path dexFile) throws IOException {
+    public static Path apkWithDex(Path apkFile, Path dexFile) throws IOException {
         try (OutputStream fos = Files.newOutputStream(apkFile);
              ZipOutputStream zip = new ZipOutputStream(fos)) {
             zip.putNextEntry(new ZipEntry("classes.dex"));
@@ -59,7 +59,7 @@ final class RebuildTestSupport {
         return apkFile;
     }
 
-    static long storedDataOffset(byte[] zipBytes, String name) {
+    public static long storedDataOffset(byte[] zipBytes, String name) {
         byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
         for (int i = 0; i <= zipBytes.length - 30 - nameBytes.length; i++) {
             if ((zipBytes[i] & 0xFF) != 0x50 || (zipBytes[i + 1] & 0xFF) != 0x4B
@@ -84,7 +84,7 @@ final class RebuildTestSupport {
         return -1;
     }
 
-    static boolean containsBytes(byte[] haystack, String needle) {
+    public static boolean containsBytes(byte[] haystack, String needle) {
         byte[] probe = needle.getBytes(StandardCharsets.UTF_8);
         outer:
         for (int i = 0; i <= haystack.length - probe.length; i++) {

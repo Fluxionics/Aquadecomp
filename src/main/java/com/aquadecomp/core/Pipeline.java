@@ -18,7 +18,11 @@ public final class Pipeline {
     public static final String VERSION = "1.0.0";
 
     public record Options(Path apk, Path outputDir, boolean deobfuscate,
-                          boolean includeResources, int threads) {
+                          boolean includeResources, int threads, Path mapping) {
+        public Options(Path apk, Path outputDir, boolean deobfuscate,
+                       boolean includeResources, int threads) {
+            this(apk, outputDir, deobfuscate, includeResources, threads, null);
+        }
     }
 
     private final DecompileEngine engine = new DecompileEngine();
@@ -76,7 +80,8 @@ public final class Pipeline {
             }
 
             DecompileEngine.Options engineOpts = new DecompileEngine.Options(
-                    opts.deobfuscate(), opts.includeResources(), opts.threads());
+                    opts.deobfuscate(), opts.includeResources(), opts.threads(),
+                    opts.mapping());
             DecompileEngine.EngineOutput output = engine.decompile(
                     input.file(), input.analysisTarget(), out, engineOpts, listener);
 

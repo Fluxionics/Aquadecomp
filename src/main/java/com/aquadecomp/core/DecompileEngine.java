@@ -6,11 +6,14 @@ import jadx.api.JavaClass;
 
 import com.aquadecomp.decompilation.DecompilerChain;
 import com.aquadecomp.decompilation.DecompilerStrategy;
+import com.aquadecomp.mapping.MappingApplier;
+import com.aquadecomp.mapping.MappingFile;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -21,9 +24,14 @@ import java.util.stream.Stream;
 
 public final class DecompileEngine {
 
-    public record Options(boolean deobfuscate, boolean includeResources, int threads) {
+    public record Options(boolean deobfuscate, boolean includeResources, int threads,
+                          Path mapping) {
+        public Options(boolean deobfuscate, boolean includeResources, int threads) {
+            this(deobfuscate, includeResources, threads, null);
+        }
+
         public static Options defaults() {
-            return new Options(true, true, 0);
+            return new Options(true, true, 0, null);
         }
     }
 
@@ -39,6 +47,68 @@ public final class DecompileEngine {
 
     public EngineOutput decompile(Path apk, Path rescueFrom, Path outDir, Options opts,
                                   PipelineListener listener) throws IOException {
+        Path jadxInput = apk;
+        Path rescueInput = rescueFrom;
+        Path mappingTemp = null;
+        if (opts.mapping() != null) {
+            listener.onStage("APLICANDO MAPPING");
+            MappingFile mapping = MappingFile.parse(opts.mapping());
+            listener.onLog("Mapping cargado: " + mapping.classCount() + " clases, "
+                    + mapping.memberCount() + " miembros");
+            mappingTemp = Files.createTempDirectory("aquadecomp-mapping-");
+            MappingApplier.Applied applied = MappingApplier.apply(apk, mapping,
+                    mappingTemp.resolve(apk.getFileName().toString()));
+            jadxInput = applied.apk();
+            if (sameFile(apk, rescueFrom)) {
+                rescueInput = jadxInput;
+            } else {
+                rescueInput = MappingApplier.apply(rescueFrom, mapping,
+                        mappingTemp.resolve("rescue-" + rescueFrom.getFileName())).apk();
+            }
+            if (applied.classes() == 0) {
+                listener.onLog("Aviso: el mapping no coincide con ninguna clase del APK");
+            } else {
+                listener.onLog("Nombres restaurados en el dex: " + applied.classes()
+                        + " clases, " + applied.members() + " miembros");
+            }
+            Files.createDirectories(outDir);
+            Files.copy(opts.mapping(), outDir.resolve(MappingFile.COPIED_NAME),
+                    StandardCopyOption.REPLACE_EXISTING);
+            if (opts.deobfuscate()) {
+                listener.onLog("Para poder recompilar después, usa --no-deobf junto "
+                        + "con --mapping");
+            }
+        }
+        try {
+            return decompileInternal(jadxInput, rescueInput, outDir, opts, listener);
+        } finally {
+            if (mappingTemp != null) {
+                deleteRecursively(mappingTemp);
+            }
+        }
+    }
+
+    private static boolean sameFile(Path a, Path b) {
+        return a.toAbsolutePath().normalize().equals(b.toAbsolutePath().normalize());
+    }
+
+    private static void deleteRecursively(Path dir) {
+        if (dir == null || !Files.isDirectory(dir)) {
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(dir)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                }
+            });
+        } catch (IOException ignored) {
+        }
+    }
+
+    private EngineOutput decompileInternal(Path apk, Path rescueFrom, Path outDir, Options opts,
+                                           PipelineListener listener) throws IOException {
         listener.onStage("PREPARANDO DESCOMPILADOR");
         listener.onProgress(5, "Configurando motor (" + apk.getFileName() + ")");
 

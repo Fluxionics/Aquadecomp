@@ -162,6 +162,36 @@ class ApiServerTest {
     }
 
     @Test
+    void namesDevuelveSugerenciasDelDirectorio() throws Exception {
+        Path dir = temp.resolve("fuentes");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("a.java"),
+                "public class a extends AppCompatActivity {\n    private String b;\n}\n");
+
+        HttpResponse<String> response = post("/api/names",
+                "{\"dir\":\"" + dir.toString().replace("\\", "\\\\") + "\"}");
+
+        assertEquals(200, response.statusCode());
+        JsonObject json = json(response);
+        assertEquals(1, json.get("filesScanned").getAsInt(),
+                "respuesta: " + response.body());
+        assertTrue(json.getAsJsonArray("suggestions").size() > 0,
+                "respuesta: " + response.body());
+        assertTrue(json.getAsJsonArray("notes").size() > 0);
+    }
+
+    @Test
+    void namesDeDirectorioInexistenteResponde400() throws Exception {
+        HttpResponse<String> response = post("/api/names",
+                "{\"dir\":\"" + temp.resolve("no-existe").toString()
+                        .replace("\\", "\\\\") + "\"}");
+
+        assertEquals(400, response.statusCode());
+        assertTrue(json(response).get("error").getAsString().contains("director"),
+                "mensaje: " + response.body());
+    }
+
+    @Test
     void rutaDesconocidaResponde404() throws Exception {
         HttpResponse<String> response = get("/nada");
 

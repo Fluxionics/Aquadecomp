@@ -28,6 +28,7 @@ import java.util.concurrent.Callable;
                 AquaCli.InspectCommand.class,
                 AquaCli.RebuildCommand.class,
                 AquaCli.NativesCommand.class,
+                AquaCli.NombresCommand.class,
                 AquaCli.ServeCommand.class
         }
 )
@@ -291,6 +292,70 @@ public class AquaCli implements Runnable {
             System.out.println("Ctrl+C para detener.");
             Thread.currentThread().join();
             return 0;
+        }
+    }
+
+    @Command(name = "nombres",
+            mixinStandardHelpOptions = true,
+            description = "Infiere nombres descriptivos para identificadores ofuscados "
+                    + "a partir de las fuentes descompiladas (solo sugerencias, no renombra).")
+    static class NombresCommand implements Callable<Integer> {
+
+        @Parameters(index = "0", paramLabel = "DIR",
+                description = "Directorio con los fuentes .java descompilados")
+        Path dir;
+
+        @Option(names = "--out", paramLabel = "ARCHIVO",
+                description = "Ruta para escribir el informe JSON con las sugerencias")
+        Path out;
+
+        @Option(names = "--limit", paramLabel = "N",
+                description = "Máximo de sugerencias impresas (por defecto: 40)")
+        int limit = 40;
+
+        @Override
+        public Integer call() {
+            try {
+                com.aquadecomp.naming.NameReport report =
+                        com.aquadecomp.naming.NameInferer.infer(dir);
+                System.out.println("\n=== Inferencia de nombres ===");
+                System.out.println("Directorio:   " + report.sourceDir());
+                System.out.println("Archivos:     " + report.filesScanned());
+                System.out.println("Sugerencias:  " + report.suggestions().size());
+                int shown = 0;
+                for (com.aquadecomp.naming.NameSuggestion s : report.suggestions()) {
+                    if (shown >= limit) {
+                        break;
+                    }
+                    System.out.println("  [" + s.kind() + "] " + s.current() + " -> "
+                            + s.suggested() + "  (confianza " + s.confidence() + ", "
+                            + s.file() + ")");
+                    for (String signal : s.signals()) {
+                        System.out.println("      señal: " + signal);
+                    }
+                    shown++;
+                }
+                if (report.suggestions().size() > shown) {
+                    System.out.println("  ... y " + (report.suggestions().size() - shown)
+                            + " más (usa --limit o --out)");
+                }
+                if (report.suggestions().isEmpty()) {
+                    System.out.println("No se detectaron identificadores que parezcan "
+                            + "ofuscados.");
+                }
+                for (String note : report.notes()) {
+                    System.out.println("Nota: " + note);
+                }
+                if (out != null) {
+                    java.nio.file.Files.writeString(out, report.toJson(),
+                            java.nio.charset.StandardCharsets.UTF_8);
+                    System.out.println("Informe JSON: " + out.toAbsolutePath());
+                }
+                return 0;
+            } catch (Exception e) {
+                System.err.println("Error: " + e.getMessage());
+                return 1;
+            }
         }
     }
 

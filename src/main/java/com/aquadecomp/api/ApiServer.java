@@ -72,6 +72,8 @@ public final class ApiServer {
                 handleRebuild(exchange);
             } else if ("/api/natives".equals(path)) {
                 handleNatives(exchange);
+            } else if ("/api/names".equals(path)) {
+                handleNames(exchange);
             } else {
                 sendJson(exchange, 404, error("Ruta no encontrada: " + path));
             }
@@ -96,7 +98,8 @@ public final class ApiServer {
                 "POST /api/inspect",
                 "POST /api/decompile",
                 "POST /api/rebuild",
-                "POST /api/natives")));
+                "POST /api/natives",
+                "POST /api/names")));
         sendJson(exchange, 200, index);
     }
 
@@ -193,8 +196,27 @@ public final class ApiServer {
         sendJson(exchange, 200, GSON.toJsonTree(report));
     }
 
-    private static JsonObject readBody(HttpExchange exchange) {
+    private void handleNames(HttpExchange exchange) throws IOException {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            methodNotAllowed(exchange, "POST");
+            return;
+        }
+        JsonObject body = readBody(exchange);
+        Path dir = requiredPath(body, "dir", "falta el campo \"dir\"");
+        if (!java.nio.file.Files.isDirectory(dir)) {
+            throw new BadRequest("No existe un directorio de fuentes en: " + dir);
+        }
+        com.aquadecomp.naming.NameReport report =
+                com.aquadecomp.naming.NameInferer.infer(dir);
+        Path out = optionalPath(body, "out");
+        if (out != null) {
+            java.nio.file.Files.writeString(out, report.toJson(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        }
+        sendJson(exchange, 200, GSON.toJsonTree(report));
+    }
+
+    private static JsonObject readBody(HttpExchange exchange) {        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             throw new BadRequest("Se espera una petición POST");
         }
         String raw;

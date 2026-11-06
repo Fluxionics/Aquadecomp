@@ -40,6 +40,8 @@ public final class RecoveryPipeline {
         int stringsDecrypted = 0;
         int javacSampled = 0;
         int javacCompiled = 0;
+        Map<String, Integer> pluginCounts = new LinkedHashMap<>();
+        java.util.Set<String> pluginNotes = new java.util.LinkedHashSet<>();
 
         for (int i = 0; i < files.size(); i++) {
             Path file = files.get(i);
@@ -52,6 +54,8 @@ public final class RecoveryPipeline {
                 decryptedHere = outcome.stringsDecrypted();
                 modified += fileModified ? 1 : 0;
                 stringsDecrypted += decryptedHere;
+                outcome.pluginCounts().forEach((k, v) -> pluginCounts.merge(k, v, Integer::sum));
+                pluginNotes.addAll(outcome.pluginNotes());
             } catch (Exception ignored) {
             }
 
@@ -90,6 +94,19 @@ public final class RecoveryPipeline {
         if (stringsDecrypted > 0) {
             items.put("Cadenas descifradas", stringsDecrypted);
         }
+        int pluginDecrypted = pluginCounts.values().stream()
+                .mapToInt(Integer::intValue).sum();
+        if (pluginDecrypted > 0) {
+            items.put("Cadenas descifradas por plugins de encriptación", pluginDecrypted);
+        }
+        int logged = 0;
+        for (String note : pluginNotes) {
+            if (logged >= 3) {
+                break;
+            }
+            listener.onLog("Plugins de encriptación: " + note);
+            logged++;
+        }
 
         return new RecoveryResult(
                 files.size(),
@@ -123,6 +140,8 @@ public final class RecoveryPipeline {
         String original = Files.readString(file);
         String recovered = stringDecryption.attemptDecryption(original);
         int decrypted = stringDecryption.lastReplacementCount();
+        Map<String, Integer> pluginCounts = stringDecryption.lastPluginCounts();
+        List<String> pluginNotes = stringDecryption.lastNotes();
 
         classRecovery.analyze(recovered);
         metadataExtractor.extract(recovered, extractClassName(file));
@@ -131,9 +150,9 @@ public final class RecoveryPipeline {
             Path backup = file.resolveSibling(file.getFileName() + ".bak");
             Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING);
             Files.writeString(file, recovered);
-            return new FileOutcome(true, decrypted);
+            return new FileOutcome(true, decrypted, pluginCounts, pluginNotes);
         }
-        return new FileOutcome(false, decrypted);
+        return new FileOutcome(false, decrypted, pluginCounts, pluginNotes);
     }
 
     private String extractClassName(Path file) {
@@ -150,7 +169,8 @@ public final class RecoveryPipeline {
         return new LinkedHashMap<>(metrics);
     }
 
-    private record FileOutcome(boolean modified, int stringsDecrypted) {
+    private record FileOutcome(boolean modified, int stringsDecrypted,
+                               Map<String, Integer> pluginCounts, List<String> pluginNotes) {
     }
 
     public static final class RecoveryResult {

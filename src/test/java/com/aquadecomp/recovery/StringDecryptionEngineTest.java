@@ -83,4 +83,48 @@ class StringDecryptionEngineTest {
         assertEquals("String q = \"\\\"\\\\a\";", result);
         assertNotEquals(0, engine.lastReplacementCount());
     }
+
+    @Test
+    void aesWithEmbeddedKeyIsDecryptedByPluginAndCounted() throws Exception {
+        String plain = "cadena cifrada real";
+        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding");
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE,
+                new javax.crypto.spec.SecretKeySpec("0123456789abcdef".getBytes(
+                        java.nio.charset.StandardCharsets.UTF_8), "AES"));
+        String cipherB64 = java.util.Base64.getEncoder().encodeToString(
+                cipher.doFinal(plain.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        String source = """
+                class a { String x() throws Exception {
+                    Cipher c = Cipher.getInstance("AES");
+                    c.init(1, new SecretKeySpec("0123456789abcdef".getBytes(), "AES"));
+                    return new String(c.doFinal(Base64.decode("%s", 0)), "UTF-8");
+                } }""".formatted(cipherB64);
+
+        String result = engine.attemptDecryption(source);
+
+        assertEquals(1, engine.lastPluginCounts()
+                .getOrDefault(com.aquadecomp.crypto.AesEmbeddedKeyPlugin.ID, 0));
+        assertEquals(1, engine.lastReplacementCount());
+        org.junit.jupiter.api.Assertions.assertTrue(result.contains("\"" + plain + "\""),
+                "resultado: " + result);
+        org.junit.jupiter.api.Assertions.assertTrue(engine.lastNotes().isEmpty(),
+                "notas: " + engine.lastNotes());
+    }
+
+    @Test
+    void aesWithoutEmbeddedKeyLeavesSourceAndAddsNote() {
+        String source = """
+                class a { String x(byte[] clave) throws Exception {
+                    Cipher c = Cipher.getInstance("AES");
+                    c.init(1, new SecretKeySpec(clave, "AES"));
+                    return new String(c.doFinal(Base64.decode("q8OQkMDDkJjDw5CQwMOQkA==", 0)),
+                            "UTF-8");
+                } }""";
+
+        String result = engine.attemptDecryption(source);
+
+        assertEquals(source, result);
+        org.junit.jupiter.api.Assertions.assertFalse(engine.lastNotes().isEmpty(),
+                "debe dejar una nota explicando por qué no descifró");
+    }
 }

@@ -1,9 +1,17 @@
 package com.aquadecomp.recovery;
 
+import com.aquadecomp.crypto.DecryptionPlugin;
+import com.aquadecomp.crypto.PluginOutcome;
+import com.aquadecomp.crypto.PluginRegistry;
+
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -18,17 +26,68 @@ public final class StringDecryptionEngine {
                     + "\\s*(?:,[^)]*)?\\s*\\)\\s*(?:,\\s*\"([^\"]+)\"\\s*)?\\)"
     );
 
+    private final List<DecryptionPlugin> plugins = PluginRegistry.plugins();
+
     private int lastReplacementCount;
+    private final Map<String, Integer> lastPluginCounts = new LinkedHashMap<>();
+    private final List<String> lastNotes = new ArrayList<>();
 
     public String attemptDecryption(String source) {
         lastReplacementCount = 0;
+        lastPluginCounts.clear();
+        lastNotes.clear();
         Map<String, String> decrypted = new HashMap<>();
 
-        String result = foldByteArrays(source, decrypted);
+        String result = source;
+        int pluginReplacements = 0;
+        for (DecryptionPlugin plugin : plugins) {
+            PluginOutcome outcome;
+            try {
+                outcome = plugin.apply(result);
+            } catch (RuntimeException e) {
+                continue;
+            }
+            lastNotes.addAll(outcome.notes());
+            if (outcome.replacements().isEmpty()) {
+                continue;
+            }
+            Applied applied = applyReplacements(result, outcome.replacements());
+            if (applied.count() == 0) {
+                continue;
+            }
+            result = applied.source();
+            pluginReplacements += applied.count();
+            lastPluginCounts.merge(plugin.id(), applied.count(), Integer::sum);
+        }
+
+        result = foldByteArrays(result, decrypted);
         result = foldBase64(result, decrypted);
 
-        lastReplacementCount = decrypted.size();
+        lastReplacementCount = decrypted.size() + pluginReplacements;
         return result;
+    }
+
+    private record Applied(String source, int count) {
+    }
+
+    private static Applied applyReplacements(String source,
+                                             List<PluginOutcome.Replacement> replacements) {
+        List<PluginOutcome.Replacement> sorted = new ArrayList<>(replacements);
+        sorted.sort(Comparator.comparingInt(PluginOutcome.Replacement::start).reversed());
+        int applied = 0;
+        int limit = Integer.MAX_VALUE;
+        StringBuilder sb = new StringBuilder(source);
+        for (PluginOutcome.Replacement replacement : sorted) {
+            if (replacement.start() < 0 || replacement.end() > source.length()
+                    || replacement.start() >= replacement.end()
+                    || replacement.end() > limit) {
+                continue;
+            }
+            sb.replace(replacement.start(), replacement.end(), replacement.text());
+            limit = replacement.start();
+            applied++;
+        }
+        return new Applied(sb.toString(), applied);
     }
 
     private String foldByteArrays(String source, Map<String, String> decrypted) {
@@ -182,5 +241,13 @@ public final class StringDecryptionEngine {
 
     public int lastReplacementCount() {
         return lastReplacementCount;
+    }
+
+    public Map<String, Integer> lastPluginCounts() {
+        return new LinkedHashMap<>(lastPluginCounts);
+    }
+
+    public List<String> lastNotes() {
+        return List.copyOf(lastNotes);
     }
 }

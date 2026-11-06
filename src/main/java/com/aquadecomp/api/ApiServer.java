@@ -29,7 +29,12 @@ public final class ApiServer {
     public static final String DEFAULT_HOST = "127.0.0.1";
     public static final int DEFAULT_PORT = 8080;
 
-    private static final Gson GSON = new GsonBuilder().create();
+    private static final Gson GSON = new GsonBuilder()
+            .registerTypeAdapter(java.nio.file.Path.class,
+                    (com.google.gson.JsonSerializer<java.nio.file.Path>)
+                            (src, type, ctx) ->
+                                    new com.google.gson.JsonPrimitive(src.toString()))
+            .create();
     private static final int MAX_BODY_BYTES = 4 * 1024 * 1024;
 
     private final HttpServer server;
@@ -65,6 +70,8 @@ public final class ApiServer {
                 handleInspect(exchange);
             } else if ("/api/rebuild".equals(path)) {
                 handleRebuild(exchange);
+            } else if ("/api/natives".equals(path)) {
+                handleNatives(exchange);
             } else {
                 sendJson(exchange, 404, error("Ruta no encontrada: " + path));
             }
@@ -88,7 +95,8 @@ public final class ApiServer {
                 "GET /",
                 "POST /api/inspect",
                 "POST /api/decompile",
-                "POST /api/rebuild")));
+                "POST /api/rebuild",
+                "POST /api/natives")));
         sendJson(exchange, 200, index);
     }
 
@@ -167,6 +175,24 @@ public final class ApiServer {
         sendJson(exchange, 200, GSON.toJsonTree(report));
     }
 
+    private void handleNatives(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            methodNotAllowed(exchange, "POST");
+            return;
+        }
+        JsonObject body = readBody(exchange);
+        Path apk = requiredPath(body, "apk", "falta el campo \"apk\"");
+        String so = optionalText(body, "so");
+        boolean decompile = optionalBoolean(body, "decompile", false);
+        Path ghidra = optionalPath(body, "ghidra");
+        Path out = optionalPath(body, "out");
+
+        com.aquadecomp.nativecode.NativeAnalyzer.Report report =
+                com.aquadecomp.nativecode.NativeAnalyzer.analyze(apk, so, decompile,
+                        ghidra, out);
+        sendJson(exchange, 200, GSON.toJsonTree(report));
+    }
+
     private static JsonObject readBody(HttpExchange exchange) {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             throw new BadRequest("Se espera una petición POST");
@@ -209,6 +235,14 @@ public final class ApiServer {
         }
         String value = body.get(field).getAsString();
         return value == null || value.isBlank() ? null : Path.of(value);
+    }
+
+    private static String optionalText(JsonObject body, String field) {
+        if (!body.has(field) || body.get(field).isJsonNull()) {
+            return null;
+        }
+        String value = body.get(field).getAsString();
+        return value == null || value.isBlank() ? null : value;
     }
 
     private static boolean optionalBoolean(JsonObject body, String field, boolean fallback) {

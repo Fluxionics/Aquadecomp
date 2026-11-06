@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -133,6 +134,31 @@ class ApiServerTest {
         assertEquals(400, response.statusCode());
         assertTrue(json(response).get("error").getAsString().contains("JSON"),
                 "mensaje: " + response.body());
+    }
+
+    @Test
+    void nativesDevuelveBibliotecasDelPaquete() throws Exception {
+        Path apk = temp.resolve("nativo.apk");
+        try (java.util.zip.ZipOutputStream zip =
+                     new java.util.zip.ZipOutputStream(Files.newOutputStream(apk))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("AndroidManifest.xml"));
+            zip.write("<manifest package=\"com.example\"/>"
+                    .getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("lib/arm64-v8a/libfake.so"));
+            zip.write(com.aquadecomp.nativecode.ElfFixture.elf64());
+            zip.closeEntry();
+        }
+
+        HttpResponse<String> response = post("/api/natives",
+                "{\"apk\":\"" + apk.toString().replace("\\", "\\\\") + "\"}");
+
+        assertEquals(200, response.statusCode());
+        JsonObject json = json(response);
+        assertEquals(1, json.get("libraries").getAsInt(), "respuesta: " + response.body());
+        JsonObject primero = json.getAsJsonArray("items").get(0).getAsJsonObject();
+        assertEquals("arm64-v8a", primero.get("abi").getAsString());
+        assertFalse(json.getAsJsonObject("ghidra").get("requested").getAsBoolean());
     }
 
     @Test

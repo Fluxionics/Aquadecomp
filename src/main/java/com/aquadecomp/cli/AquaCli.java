@@ -27,6 +27,7 @@ import java.util.concurrent.Callable;
                 AquaCli.DecompileCommand.class,
                 AquaCli.InspectCommand.class,
                 AquaCli.RebuildCommand.class,
+                AquaCli.NativesCommand.class,
                 AquaCli.ServeCommand.class
         }
 )
@@ -160,6 +161,101 @@ public class AquaCli implements Runnable {
             RebuildReport report = new RebuildPipeline().run(opts, listener);
             System.out.println(report.consoleSummary());
             return report.success() ? 0 : 1;
+        }
+    }
+
+    @Command(name = "natives",
+            mixinStandardHelpOptions = true,
+            description = "Analiza las bibliotecas .so del paquete: ELF real "
+                    + "(símbolos, secciones, dependencias) y Ghidra headless si está instalado.")
+    static class NativesCommand implements Callable<Integer> {
+
+        @Parameters(index = "0", paramLabel = "APK", description = "Ruta del archivo .apk")
+        Path apk;
+
+        @Option(names = "--so", paramLabel = "TEXTO",
+                description = "Filtra bibliotecas cuyo nombre contenga el texto")
+        String so;
+
+        @Option(names = "--decompile", description = "Solicitar desensamblado con Ghidra "
+                + "(si no está instalado, se indica y solo se hace análisis ELF)")
+        boolean decompile;
+
+        @Option(names = "--ghidra", paramLabel = "DIR",
+                description = "Directorio de instalación de Ghidra (por defecto: "
+                        + "GHIDRA_INSTALL_DIR o PATH)")
+        Path ghidra;
+
+        @Option(names = "--out", paramLabel = "DIR",
+                description = "Directorio para la salida de Ghidra (por defecto: temporal)")
+        Path out;
+
+        @Option(names = "--limit", paramLabel = "N",
+                description = "Máximo de exports impresos por biblioteca (por defecto: 10)")
+        int limit = 10;
+
+        @Override
+        public Integer call() {
+            try {
+                com.aquadecomp.nativecode.NativeAnalyzer.Report report =
+                        com.aquadecomp.nativecode.NativeAnalyzer.analyze(
+                                apk, so, decompile, ghidra, out);
+                System.out.println("\n=== Bibliotecas nativas ===");
+                System.out.println("APK:      " + apk);
+                System.out.println(" .so:     " + report.libraries());
+                if (report.libraries() == 0) {
+                    report.warnings().forEach(w -> System.out.println("Aviso: " + w));
+                }
+                for (com.aquadecomp.nativecode.NativeAnalyzer.Library lib : report.items()) {
+                    System.out.println("\n" + lib.entry());
+                    if (lib.error() != null) {
+                        System.out.println("  Error: " + lib.error());
+                        continue;
+                    }
+                    var elf = lib.elf();
+                    System.out.println("  ABI:         " + elf.abi()
+                            + " (" + elf.bits() + " bits, "
+                            + (elf.littleEndian() ? "little" : "big") + " endian)");
+                    System.out.println("  Arquitectura: " + elf.architecture()
+                            + "  e_machine=" + elf.machine());
+                    System.out.println("  Estado:      " + (elf.stripped()
+                            ? "sin symtab (stripped)" : "con symtab"));
+                    System.out.println("  Secciones:   " + elf.sections().size());
+                    System.out.println("  Símbolos:    " + elf.symbols()
+                            + " (exports " + elf.exports().size()
+                            + ", imports " + elf.imports() + ")");
+                    if (elf.soname() != null) {
+                        System.out.println("  SONAME:      " + elf.soname());
+                    }
+                    if (!elf.needed().isEmpty()) {
+                        System.out.println("  Necesita:    " + String.join(", ",
+                                elf.needed()));
+                    }
+                    if (!elf.exports().isEmpty()) {
+                        int shown = Math.min(limit, elf.exports().size());
+                        System.out.println("  Primeros exports (" + shown + "/"
+                                + elf.exports().size() + "):");
+                        for (int i = 0; i < shown; i++) {
+                            System.out.println("    - " + elf.exports().get(i));
+                        }
+                    }
+                }
+                if (!report.warnings().isEmpty() && report.libraries() > 0) {
+                    System.out.println("\nAvisos:");
+                    report.warnings().forEach(w -> System.out.println("  - " + w));
+                }
+                var ghidra = report.ghidra();
+                System.out.println("\n-- Ghidra --");
+                System.out.println(ghidra.message());
+                if (ghidra.outputFile() != null) {
+                    System.out.println("Salida:  " + ghidra.outputFile().toAbsolutePath());
+                    System.out.println("Funciones descompiladas: " + ghidra.functions());
+                }
+                return decompile && !ghidra.available() ? 1 : 0;
+            } catch (Exception e) {
+                System.err.println("Error: " + e.getMessage());
+                return 1;
+            }
         }
     }
 

@@ -4,6 +4,8 @@ import com.aquadecomp.core.Pipeline;
 import com.aquadecomp.core.PipelineListener;
 import com.aquadecomp.core.PipelineResult;
 import com.aquadecomp.core.ReportWriter;
+import com.aquadecomp.rebuild.RebuildPipeline;
+import com.aquadecomp.rebuild.RebuildReport;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -11,6 +13,8 @@ import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -21,7 +25,8 @@ import java.util.concurrent.Callable;
                 + "medición de efectividad del código recuperado.",
         subcommands = {
                 AquaCli.DecompileCommand.class,
-                AquaCli.InspectCommand.class
+                AquaCli.InspectCommand.class,
+                AquaCli.RebuildCommand.class
         }
 )
 public class AquaCli implements Runnable {
@@ -97,6 +102,54 @@ public class AquaCli implements Runnable {
         private static String stripExtension(String name) {
             int dot = name.lastIndexOf('.');
             return dot > 0 ? name.substring(0, dot) : name;
+        }
+    }
+
+    @Command(name = "rebuild",
+            mixinStandardHelpOptions = true,
+            description = "Recompila los fuentes de una descompilación (javac + d8) y "
+                    + "genera un APK firmado con los cambios de código.")
+    static class RebuildCommand implements Callable<Integer> {
+
+        @Parameters(index = "0", paramLabel = "SALIDA",
+                description = "Directorio de una descompilación (el que contiene sources/)")
+        Path dir;
+
+        @Option(names = {"-o", "--out"}, paramLabel = "APK",
+                description = "APK de salida (por defecto: <salida>/<original>-rebuilt.apk)")
+        Path out;
+
+        @Option(names = "--original", paramLabel = "APK",
+                description = "APK original (por defecto: el registrado en el informe de la descompilación)")
+        Path original;
+
+        @Option(names = "--android-jar", paramLabel = "JAR",
+                description = "android.jar local (por defecto: caché de Aquadecomp o descarga automática)")
+        Path androidJar;
+
+        @Option(names = "--app", description = "Recompilar la aplicación completa (falla si algún archivo no compila)")
+        boolean app;
+
+        @Option(names = "--archivos", paramLabel = "A,B", split = ",",
+                description = "Archivos explícitos a recompilar (rutas dentro de sources/)")
+        List<String> archivos = new ArrayList<>();
+
+        @Option(names = "--min-api", paramLabel = "N",
+                description = "API mínima del dex generado (por defecto: 21)")
+        int minApi = 21;
+
+        @Option(names = {"-q", "--quiet"}, description = "Solo mostrar el resumen final")
+        boolean quiet;
+
+        @Override
+        public Integer call() {
+            PipelineListener listener = quiet ? PipelineListener.SILENT : PipelineListener.CONSOLE;
+            RebuildPipeline.Options opts = new RebuildPipeline.Options(
+                    dir, original, out, androidJar,
+                    archivos != null ? archivos : List.of(), app, minApi);
+            RebuildReport report = new RebuildPipeline().run(opts, listener);
+            System.out.println(report.consoleSummary());
+            return report.success() ? 0 : 1;
         }
     }
 

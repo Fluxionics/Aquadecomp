@@ -26,7 +26,8 @@ import java.util.concurrent.Callable;
         subcommands = {
                 AquaCli.DecompileCommand.class,
                 AquaCli.InspectCommand.class,
-                AquaCli.RebuildCommand.class
+                AquaCli.RebuildCommand.class,
+                AquaCli.ServeCommand.class
         }
 )
 public class AquaCli implements Runnable {
@@ -159,6 +160,41 @@ public class AquaCli implements Runnable {
             RebuildReport report = new RebuildPipeline().run(opts, listener);
             System.out.println(report.consoleSummary());
             return report.success() ? 0 : 1;
+        }
+    }
+
+    @Command(name = "serve",
+            mixinStandardHelpOptions = true,
+            description = "Levanta la API REST local (JSON) para descompilar, "
+                    + "inspeccionar y recompilar por HTTP.")
+    static class ServeCommand implements Callable<Integer> {
+
+        @Option(names = "--host", paramLabel = "HOST",
+                description = "Dirección de escucha (por defecto: 127.0.0.1)")
+        String host = com.aquadecomp.api.ApiServer.DEFAULT_HOST;
+
+        @Option(names = "--port", paramLabel = "N",
+                description = "Puerto (por defecto: 8080; 0 elige uno libre)")
+        int port = com.aquadecomp.api.ApiServer.DEFAULT_PORT;
+
+        @Override
+        public Integer call() throws Exception {
+            com.aquadecomp.api.ApiServer server =
+                    new com.aquadecomp.api.ApiServer(host, port);
+            server.start();
+            System.out.println("Aquadecomp API en http://" + host + ":" + server.port());
+            System.out.println("  GET  /            índice de endpoints");
+            System.out.println("  GET  /health      estado");
+            System.out.println("  POST /api/inspect  {\"apk\": \"ruta\"}");
+            System.out.println("  POST /api/decompile {\"apk\": \"ruta\", ...}");
+            System.out.println("  POST /api/rebuild  {\"decompileDir\": \"ruta\", ...}");
+            if (!"127.0.0.1".equals(host) && !"localhost".equals(host)) {
+                System.out.println("Aviso: el servidor escucha en " + host
+                        + " y no tiene autenticación; no lo expongas a redes ajenas.");
+            }
+            System.out.println("Ctrl+C para detener.");
+            Thread.currentThread().join();
+            return 0;
         }
     }
 

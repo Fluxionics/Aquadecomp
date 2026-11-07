@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests y JAR (Windows, Java 21)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache de android.jar
+        uses: actions/cache@v4
+        with:
+          path: ~/.aquadecomp/android.jar
+          key: android-jar-14-robolectric-10818077
+
+      - name: Suite de pruebas
+        run: .\gradlew.bat test
+
+      - name: Empaquetar JAR
+        run: .\gradlew.bat jar
+
+      - name: Subir aquedecomp.jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: aquedecomp-jar
+          path: build/libs/aquedecomp.jar
+          if-no-files-found: error

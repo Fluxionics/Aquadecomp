@@ -44,7 +44,47 @@ java -jar aquedecomp.jar rebuild salida -o app-modificado.apk
 **Avisos que siempre aparecen**:
 
 - Los recursos, el manifiesto y los assets se conservan del APK original: el rebuild solo aplica cambios de código
-- El APK se firma con un certificado propio, distinto del del desarrollador; para instalar puede ser necesario desinstalar la app previa o usar `adb install -r`
+- El APK se firma con un certificado propio, distinto del del desarrollador; para instalar puede ser necesario desinstalar la app previa o usar `adb install -r` (ver la sección siguiente)
+
+## Firma con certificado propio e instalación
+
+`rebuild` **no** puede firmar con la clave del desarrollador: esa clave no
+está en el APK ni debe usarse. Por eso cada rebuild genera un par de claves
+RSA nuevo y lo autocertifica con el sujeto:
+
+```
+CN=Aquadecomp Rebuild, O=Aquadecomp
+```
+
+y firma el resultado con esquemas **v1 + v2 + v3** (los tres, siempre).
+
+Consecuencias prácticas:
+
+- **El APK reconstruido no es actualización del original.** Android compara
+  el certificado del que firma la actualización con el del APK instalado.
+  Como son distintos, `adb install -r app-reconstruido.apk` falla con
+  `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+- **Para instalar hay que desinstalar antes** (`adb uninstall
+  <paquete>` o desinstalar desde el dispositivo). Eso **borra los datos de
+  la app**: copia lo que necesites antes.
+- **Cada rebuild genera un certificado distinto**, así que dos APKs
+  reconstruidos tampoco se actualizan el uno sobre el otro.
+- **No aplica a apps de tienda ni de sistema** como destino de
+  actualización: esas apps solo reciben actualizaciones firmadas por su
+  desarrollador original. El APK reconstruido se instala como app nueva
+  (con sus datos propios) después de desinstalar la anterior.
+- Las apps que verificen la firma en su propio código (algunos bancos,
+  juegos y servicios con DRM) pueden rechazar el APK reconstruido aunque
+  el sistema lo instale.
+
+Comprobar quién firmó un APK:
+
+```bash
+apksigner verify --print-certs app-reconstruido.apk
+```
+
+Debe aparecer `CN=Aquadecomp Rebuild, O=Aquadecomp`. Si aparece otro
+nombre, el APK no salió de `rebuild` de Aquadecomp.
 
 ## mapping.txt
 

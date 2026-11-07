@@ -37,6 +37,15 @@ Los motores de rescate reciben el APK convertido a JAR con dex2jar y solo proces
 
 **Resultado**: más clases recuperadas que con JADX solo, con el motor principal manteniendo la calidad del resto del código.
 
+### Orquestación de herramientas existentes
+
+Aquadecomp no reimplementa descompiladores: integra herramientas existentes
+(JADX, CFR, Procyon, Vineflower, dex2jar, baksmali/smali, d8 y apksig) en una
+única cadena con criterios de parada, respaldo, análisis y verificación. El
+valor del proyecto está en esa orquestación: recuperación de las clases que
+faltan, análisis de resultados, verificación de la firma y reconstrucción del
+APK.
+
 El informe indica el motor que generó cada archivo: `confidence.classes[].decompiler` guarda la etiqueta por archivo y `confidence.decompilerStats` resume cuántos archivos produjo cada motor. La etiqueta es metadato, no entra en el cálculo del puntaje.
 
 ### Informe de Efectividad
@@ -71,7 +80,7 @@ Los cuatro formatos se validan en la etapa de normalización; un archivo que no 
 
 ### 2.0.0: Análisis y Extensibilidad
 
-- **`rebuild`** - recompila las fuentes descompiladas y genera un APK firmado con los cambios aplicados; detecta `aquedecomp-mapping.txt` para restaurar el classpath y renombrar el dex a los nombres originales (ver [docs/REBUILD.md](docs/REBUILD.md))
+- **`rebuild`** - recompila las fuentes descompiladas y genera un APK firmado con los cambios aplicados (firma v1+v2+v3 con certificado propio: instalarlo requiere desinstalar la app previa); detecta `aquedecomp-mapping.txt` para restaurar el classpath y renombrar el dex a los nombres originales (ver [docs/REBUILD.md](docs/REBUILD.md))
 - **`--mapping`** - aplica mappings de ProGuard/R8 al descompilar para recuperar clases y miembros con sus nombres originales (ver [docs/REBUILD.md](docs/REBUILD.md))
 - **`serve`** - API REST local con JSON para descompilar, inspeccionar, recompilar, analizar nativos e inferir nombres por HTTP (ver [docs/API.md](docs/API.md))
 - **`natives`** - análisis ELF real de los `.so` del paquete (secciones, exports, imports, dependencias) con desensamblado Ghidra opcional si está instalado (ver [docs/NATIVES.md](docs/NATIVES.md))
@@ -310,19 +319,11 @@ java -jar aquedecomp.jar decompile signal.apk -o ./output --quiet
 
 ### Tiempos medidos
 
-Tiempos totales de las siete etapas (incluida la puntuación de confianza de
-cada archivo) medidos en una máquina de escritorio con Java 21 y Gradle 9,
-usando `java -jar aquedecomp.jar decompile <apk> -o <salida>`:
-
-| APK                          | Tamaño  | Tiempo total |
-|------------------------------|---------|--------------|
-| smsscheduler.apk             | 50 KB   | 89 s         |
-| mini.apk                     | 4.6 MB  | 465 s        |
-| signal.apk                   | 109.7 MB| 1307 s       |
-
-El tiempo lo dominan la descompilación con JADX y el análisis de confianza,
-no la lectura del ZIP. Para reprocir estas medidas y las de los cuatro
-formatos, ver [docs/VERIFICATION.md](docs/VERIFICATION.md).
+La tabla oficial de benchmarks (APK pequeño, mediano y grande, con archivos,
+efectividad, confianza y motores por corrida) se publica por versión en
+[docs/VERIFICATION.md](docs/VERIFICATION.md); ese es el único documento con
+tiempos medidos. Para reproducir estas medidas y las de los cuatro formatos,
+sigue el procedimiento de esa guía.
 
 ### Consumo de Memoria
 
@@ -347,7 +348,7 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 - Reportes JSON y Markdown
 
 ### Fase 2: Robustez (Completado v0.2)
-- Agregado Procyon como descompilador 5to
+- Agregado Procyon como cuarto descompilador de la cadena (JADX, CFR, Procyon, Vineflower)
 - CompilationVerifier para heurística de compilación
 - SyntheticCodeDetector para código sintético
 - Mejora de manejo de errores y tolerancia parcial
@@ -378,8 +379,11 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 
 ### Funciones congeladas
 
-No se agregan motores ni algoritmos hasta una versión posterior.
-Los criterios de 1.0.0 y 2.0.0 y cómo comprobarlos están en [docs/VERIFICATION.md](docs/VERIFICATION.md).
+A partir de 2.0.1 las funcionalidades quedan congeladas: no se agregan
+motores, algoritmos ni comandos nuevos hasta completar la verificación de
+esta versión; solo se aceptan correcciones de errores. Los criterios de
+1.0.0, 2.0.0 y 2.0.1 y cómo comprobarlos están en
+[docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Troubleshooting
 

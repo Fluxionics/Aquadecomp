@@ -123,8 +123,9 @@ java -jar aquedecomp.jar rebuild <directorio> -o <salida.apk> [opciones]
 | `--min-api` | 21 | API mínima del dex |
 
 Los recursos, el manifiesto y los assets se conservan del APK original; el APK
-se firma con un certificado propio de Aquadecomp. Detalles en
-[REBUILD.md](REBUILD.md).
+se firma con un certificado propio de Aquadecomp, así que instalarlo exige
+desinstalar antes la app original (se borran sus datos). Detalles y cómo
+verificar la firma en [REBUILD.md](REBUILD.md).
 
 ```bash
 # Editar fuentes y regenerar el APK

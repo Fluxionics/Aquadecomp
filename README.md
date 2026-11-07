@@ -151,6 +151,10 @@ java -jar aquedecomp.jar --gui
 java -jar aquedecomp.jar gui
 ```
 
+La ventana ofrece en pestañas las funciones de la CLI: descompilar, analizar
+(inspect), recompilar, analizar bibliotecas nativas y sugerir nombres. Los
+resultados aparecen en las pestañas Reporte y Registro.
+
 ## Estructura del Proyecto
 
 ```

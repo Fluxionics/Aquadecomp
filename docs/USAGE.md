@@ -189,6 +189,11 @@ O simplemente sin argumentos:
 java -jar aquedecomp.jar
 ```
 
+La ventana tiene una pestaña por función: **Descompilar**, **Analizar**
+(inspect), **Recompilar**, **Nativos** (bibliotecas `.so`) y **Nombres**
+(sugerencias). El botón inferior ejecuta la función de la pestaña activa y
+los resultados se muestran en las pestañas Reporte y Registro.
+
 ### Opciones de JVM
 
 ```bash

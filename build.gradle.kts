@@ -44,6 +44,8 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.0.21")
+    testImplementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

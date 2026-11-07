@@ -204,7 +204,7 @@ Options {
   "engineByFile": { "com/example/Foo.java": "JADX", "com/example/Bar.java": "CFR" },
   "outputDir": "...",
   "success": true,
-  "toolVersion": "1.0.0"
+  "toolVersion": "2.0.0"
 }
 ```
 
@@ -312,6 +312,23 @@ Ejemplo:
 APK 100 MB → 500 + 100 + 300 = 900 MB necesarios
 ```
 
+## Paquetes de 2.0.0
+
+| Paquete | Responsabilidad |
+|---------|-----------------|
+| `rebuild` | Recompila las fuentes de `sources/` con `javac`, convierte a dex con dexlib2, reemplaza el dex en una copia del ZIP y firma v1+v2+v3 con certificado propio |
+| `mapping` | Parser propio de mappings ProGuard/R8 (`MappingFile`), aplicación al APK antes de descompilar (`MappingApplier`, ZIP en memoria) y renombrado del dex recompilado (`DexMappingRewriter`) |
+| `api` | Servidor HTTP local con `com.sun.net.httpserver` del JDK, sin dependencias nuevas; expone el pipeline como endpoints JSON |
+| `nativecode` | Parser ELF propio (32/64 bits, LE/BE, secciones, símbolos, dinámica), detección de Ghidra (`GhidraLocator`) y ejecución headless con el script `DecompileFunctions.java` |
+| `crypto` | SPI `DecryptionPlugin` cargada con `ServiceLoader`, tres plugins integrados (AES/RC4/XOR con clave embebida) y registro combinado en `PluginRegistry` |
+| `naming` | Inferencia heurística de nombres (`NameInferer`) con reglas fijas, informe `NameReport` en JSON, sin modificar código |
+
+Flujos:
+
+- **Recompilación**: `sources/` → `SourceCompiler` (javac) → `DexBuilder` (dex) → `MappingApplier`/`DexMappingRewriter` (nombres) → `ApkPacker` (ZIP + firma)
+- **Descifrado con plugins**: `RecoveryPipeline` → `StringDecryptionEngine` → `PluginRegistry.plugins()` → sustituciones imprimibles + notas → reporte
+- **Nativos**: `NativeAnalyzer` recorre el ZIP, `ElfParser` analiza cada `.so`, y si se pidió Ghidra y existe `analyzeHeadless`, `GhidraRunner` ejecuta el script en modo headless; si no existe, se entrega el análisis ELF con un mensaje explícito
+
 ## Extensibilidad
 
 ### Agregar nuevo Descompilador
@@ -344,6 +361,22 @@ if (content.contains("my_custom_pattern")) {
 }
 ```
 
+### Agregar un plugin de descifrado
+
+```java
+// 1. Implementar DecryptionPlugin
+public class MiPlugin implements DecryptionPlugin {
+    public String id() { return "mi-plugin"; }
+    public String description() { return "..."; }
+    public PluginOutcome apply(String source) { ... }
+}
+
+// 2. Registrar: src/main/resources/META-INF/services/com.aquadecomp.crypto.DecryptionPlugin
+//    con la línea: com.ejemplo.MiPlugin
+```
+
+`PluginRegistry.plugins()` lo combina con los plugins integrados (deduplicando por `id`) y `StringDecryptionEngine` lo ejecuta en cada archivo. Ver [CRYPTO_PLUGINS.md](CRYPTO_PLUGINS.md).
+
 ## Consideraciones de Diseño
 
 1. **Cadena de Respaldo**: Los motores de rescate cubren las clases que JADX no genera
@@ -356,13 +389,12 @@ if (content.contains("my_custom_pattern")) {
 
 1. **Clases faltantes**: Si ningún motor rescata una clase, queda sin archivo en `sources/`
 2. **Vineflower/CFR/Procyon**: Pueden no estar disponibles (dependencias opcionales)
-3. **Código Nativo**: Librerías .so requieren Ghidra (futuro)
+3. **Código Nativo**: El análisis ELF es completo; el desensamblado requiere Ghidra instalado (opcional, con mensaje explícito si falta)
 4. **DEX Runtime**: Packers con DEX cargado dinámico no se detectan (futuro)
-5. **Renombrado**: Sin ProGuard mapping.txt, no se recuperan nombres originales
+5. **Renombrado**: Sin mapping.txt de ProGuard/R8 no se recuperan nombres originales; `nombres` solo sugiere, no renombra
 
 ## Roadmap de Mejoras
 
-1. **Futuro**: Ghidra headless para código nativo (.so)
-2. **Futuro**: frida-dexdump para packers
-3. **Futuro**: Machine Learning para mejor scoring
-4. **Futuro**: API REST + UI Web mejorada
+1. **Futuro**: frida-dexdump para packers
+2. **Futuro**: Machine Learning para mejor scoring
+3. **Futuro**: UI Web sobre la API REST existente

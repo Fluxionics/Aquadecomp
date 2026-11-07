@@ -15,16 +15,22 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Interpretación de resultados
   - Troubleshooting
   - Scripting
+- [Recompilación y mapping (REBUILD.md)](REBUILD.md) - `rebuild` para editar fuentes y regenerar el APK, y `--mapping` para mappings de ProGuard/R8
+- [API REST (API.md)](API.md) - comando `serve`, endpoints JSON y ejemplos con curl
+- [Bibliotecas nativas (NATIVES.md)](NATIVES.md) - comando `natives`, análisis ELF real y Ghidra opcional
+- [Plugins de encriptación (CRYPTO_PLUGINS.md)](CRYPTO_PLUGINS.md) - descifrado de AES/RC4/XOR con clave embebida y cómo escribir un plugin
+- [Inferencia de nombres (NAME_INFERENCE.md)](NAME_INFERENCE.md) - comando `nombres`, sugerencias heurísticas para identificadores ofuscados
 
 ### Para Desarrolladores
 **Comienza aquí si quieres entender o extender Aquadecomp**
 
-- [Arquitectura (ARCHITECTURE.md)](ARCHITECTURE.md) - diseño de capas:
+- [Arquitectura (ARCHITECTURE.md)](ARCHITECTURE.md) - diseño de capas y paquetes:
   - Input Layer (validación de entrada)
   - Decompilation Layer (cadena de descompiladores)
   - Recovery Layer (motores de recuperación)
   - Verification Layer (puntuación de confianza)
   - Reporting Layer (JSON + Markdown)
+  - Paquetes de 2.0.0: `rebuild`, `mapping`, `api`, `nativecode`, `crypto`, `naming`
 - [Motores de Recuperación (RECOVERY_ENGINES.md)](RECOVERY_ENGINES.md) - paquete `recovery`:
   - RecoveryPipeline (orquestación)
   - StringDecryptionEngine
@@ -36,7 +42,7 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Verificación de sintaxis
   - Detección de código sintético
   - Niveles (Excelente/Bueno/Aceptable/Pobre/No confiable)
-- [Verificación (VERIFICATION.md)](VERIFICATION.md) - criterios de 1.0.0, comandos reproducibles y matriz de resultados
+- [Verificación (VERIFICATION.md)](VERIFICATION.md) - criterios de 1.0.0 y 2.0.0, comandos reproducibles y matriz de resultados
 
 ## Estructura del Proyecto
 
@@ -53,6 +59,11 @@ Aquadecomp/
 │   ├── USAGE.md
 │   ├── RECOVERY_ENGINES.md
 │   ├── CONFIDENCE_SCORING.md
+│   ├── REBUILD.md
+│   ├── API.md
+│   ├── NATIVES.md
+│   ├── CRYPTO_PLUGINS.md
+│   ├── NAME_INFERENCE.md
 │   └── VERIFICATION.md
 ├── src/main/java/com/aquadecomp/
 │   ├── Aquadecomp.java        Punto de entrada
@@ -62,7 +73,13 @@ Aquadecomp/
 │   ├── decompilation/         Cadena de descompiladores
 │   ├── input/                 Validación de entrada
 │   ├── recovery/              Motores de recuperación
-│   └── verification/          Puntuación de confianza
+│   ├── verification/          Puntuación de confianza
+│   ├── rebuild/               Recompilación y firma de APK
+│   ├── mapping/               Aplicación de mappings ProGuard/R8
+│   ├── api/                   Servidor REST local
+│   ├── nativecode/            Análisis ELF y Ghidra
+│   ├── crypto/                Plugins de descifrado
+│   └── naming/                Inferencia de nombres
 └── src/test/java/com/aquadecomp/  Pruebas unitarias
 ```
 
@@ -99,7 +116,8 @@ APK/AAB/XAPK/APKS
 - **Fase 2**: Cadena de respaldo multi-motor (completado)
 - **Fase 3**: Recuperación y confianza conectadas al flujo (completado)
 - **1.0.0**: estabilización, pruebas automatizadas y verificación de los cuatro formatos (completado)
+- **2.0.0**: recompilación con `rebuild`, mappings con `--mapping`, API REST, análisis nativo, plugins de encriptación e inferencia de nombres (completado)
 
 Las funciones nuevas están congeladas: no hay motores, algoritmos ni
-características agregados hasta una versión posterior. El estado de los siete
-criterios de 1.0.0 está en [VERIFICATION.md](VERIFICATION.md).
+características agregados hasta una versión posterior. El estado de los
+criterios de 1.0.0 y 2.0.0 está en [VERIFICATION.md](VERIFICATION.md).

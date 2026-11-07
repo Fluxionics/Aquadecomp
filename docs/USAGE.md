@@ -55,6 +55,7 @@ java -jar aquedecomp.jar decompile <archivo> -o <salida> [opciones]
 | `-q, --quiet` | flag | apagado | Solo mostrar el resumen final |
 | `--no-md` | flag | apagado | No generar reporte Markdown |
 | `--no-json` | flag | apagado | No generar reporte JSON |
+| `--mapping` | PATH | sin mapping | Aplicar un mapping de ProGuard/R8 antes de descompilar |
 | `--help` | - | - | Mostrar ayuda |
 
 **Ejemplos**:
@@ -102,6 +103,73 @@ java -jar aquedecomp.jar inspect app.apk
 También acepta los cuatro formatos: en XAPK y APKS inspecciona el APK interno
 extraído y lo indica en la salida (`Formato: XAPK (analizado sobre su APK
 interno)`).
+
+#### `rebuild`
+
+Recompila las fuentes descompiladas y genera un APK firmado con los cambios.
+
+```bash
+java -jar aquedecomp.jar rebuild <directorio> -o <salida.apk> [opciones]
+```
+
+| Opción | Default | Descripción |
+|--------|---------|-------------|
+| `-o, --out` | `<directorio>/reconstruido.apk` | APK de salida |
+| `--original` | detectado del reporte | APK original de donde salen recursos y manifiesto |
+| `--android-jar` | `~/.aquadecomp/android.jar` | android.jar para compilar |
+| `--mapping` | detectado (`aquedecomp-mapping.txt`) | Archivo de mapping |
+| `--files` | todas | Fuentes a compilar (modo parche) |
+| `--whole-app` | apagado | Recompilar la app completa |
+| `--min-api` | 21 | API mínima del dex |
+
+Los recursos, el manifiesto y los assets se conservan del APK original; el APK
+se firma con un certificado propio de Aquadecomp. Detalles en
+[REBUILD.md](REBUILD.md).
+
+```bash
+# Editar fuentes y regenerar el APK
+java -jar aquedecomp.jar rebuild ./results -o ./results/app-nuevo.apk
+```
+
+#### `natives`
+
+Analiza las bibliotecas `.so` del paquete: ELF real (secciones, exports,
+imports, dependencias) y Ghidra headless si está instalado.
+
+```bash
+java -jar aquedecomp.jar natives app.apk [--so TEXTO] [--decompile] [--ghidra DIR]
+```
+
+| Opción | Descripción |
+|--------|-------------|
+| `--so` | Filtra bibliotecas cuyo nombre contenga el texto |
+| `--decompile` | Solicita desensamblado con Ghidra (si no está, se indica y solo se hace análisis ELF) |
+| `--ghidra` | Directorio de instalación de Ghidra |
+| `--out` | Directorio de salida de Ghidra |
+| `--limit` | Máximo de exports impresos por biblioteca (default 10) |
+
+Ver [NATIVES.md](NATIVES.md).
+
+#### `nombres`
+
+Sugiere nombres descriptivos para identificadores ofuscados en un directorio
+de fuentes. Solo informe: no modifica ningún archivo.
+
+```bash
+java -jar aquedecomp.jar nombres <directorio-fuentes> [--out archivo.json] [--limit N]
+```
+
+Ver [NAME_INFERENCE.md](NAME_INFERENCE.md).
+
+#### `serve`
+
+Levanta la API REST local (JSON) en 127.0.0.1:8080 por defecto.
+
+```bash
+java -jar aquedecomp.jar serve [--host HOST] [--port N]
+```
+
+Ver [API.md](API.md) para endpoints y ejemplos.
 
 #### `gui`
 
@@ -322,7 +390,7 @@ Estructura (serialización Gson de `PipelineResult`), con valores ilustrativos:
   "outputDir": "./output",
   "success": true,
   "errorMessage": null,
-  "toolVersion": "1.0.0"
+  "toolVersion": "2.0.0"
 }
 ```
 
@@ -336,7 +404,7 @@ Ejemplo de estructura (valores ilustrativos; lo real depende del APK):
 - **Fecha:** 2026-11-04T13:05:00Z
 - **APK:** C:/apk-work/app.apk
 - **Tamaño:** 50.91 MB
-- **Versión Aquadecomp:** 1.0.0
+- **Versión Aquadecomp:** 2.0.0
 - **Entrada:** APK
 
 ## Efectividad global: 78.5/100

@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
 @Command(
         name = "aquedecomp",
         mixinStandardHelpOptions = true,
-        version = "Aquadecomp 1.0.0",
+        version = "Aquadecomp 2.0.0",
         description = "Descompilador de APKs con análisis de ofuscación y "
                 + "medición de efectividad del código recuperado.",
         subcommands = {

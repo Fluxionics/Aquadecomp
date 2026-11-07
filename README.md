@@ -69,6 +69,15 @@ Los cuatro formatos se validan en la etapa de normalización; un archivo que no 
 - Estadísticas de descompilación (clases, errores, líneas)
 - Informe de efectividad con metodología publicada
 
+### 2.0.0: Análisis y Extensibilidad
+
+- **`rebuild`** - recompila las fuentes descompiladas y genera un APK firmado con los cambios aplicados; detecta `aquedecomp-mapping.txt` para restaurar el classpath y renombrar el dex a los nombres originales (ver [docs/REBUILD.md](docs/REBUILD.md))
+- **`--mapping`** - aplica mappings de ProGuard/R8 al descompilar para recuperar clases y miembros con sus nombres originales (ver [docs/REBUILD.md](docs/REBUILD.md))
+- **`serve`** - API REST local con JSON para descompilar, inspeccionar, recompilar, analizar nativos e inferir nombres por HTTP (ver [docs/API.md](docs/API.md))
+- **`natives`** - análisis ELF real de los `.so` del paquete (secciones, exports, imports, dependencias) con desensamblado Ghidra opcional si está instalado (ver [docs/NATIVES.md](docs/NATIVES.md))
+- **Plugins de encriptación** - descifrado de AES/RC4/XOR cuando la clave está embebida como literal, con notas honestas cuando no se puede descifrar (ver [docs/CRYPTO_PLUGINS.md](docs/CRYPTO_PLUGINS.md))
+- **`nombres`** - sugerencias heurísticas de nombres para identificadores ofuscados, solo informe, sin modificar código (ver [docs/NAME_INFERENCE.md](docs/NAME_INFERENCE.md))
+
 ## Instalación
 
 ### Requisitos
@@ -116,6 +125,21 @@ java -jar aquedecomp.jar decompile signal.apk \
 
 # Solo inspeccionar el APK (sin descompilar)
 java -jar aquedecomp.jar inspect signal.apk
+
+# Descompilar aplicando un mapping de ProGuard/R8
+java -jar aquedecomp.jar decompile signal.apk -o ./output --mapping mapping.txt
+
+# Recompilar las fuentes editadas en un APK firmado
+java -jar aquedecomp.jar rebuild ./output -o ./output-modificado.apk
+
+# Analizar bibliotecas nativas (.so)
+java -jar aquedecomp.jar natives signal.apk --so libsignal
+
+# Sugerir nombres para identificadores ofuscados
+java -jar aquedecomp.jar nombres ./output/sources --out ./output/nombres.json
+
+# API REST local
+java -jar aquedecomp.jar serve --port 8080
 ```
 
 ### GUI
@@ -130,7 +154,7 @@ java -jar aquedecomp.jar --gui
 src/main/java/com/aquadecomp/
 ├── Aquadecomp.java               Punto de entrada (CLI o GUI)
 ├── cli/
-│   └── AquaCli.java              Comandos de línea (decompile, inspect)
+│   └── AquaCli.java              Comandos de línea (decompile, inspect, rebuild, natives, nombres, serve)
 ├── gui/
 │   └── AquaGui.java              Interfaz gráfica Swing
 ├── core/
@@ -159,6 +183,32 @@ src/main/java/com/aquadecomp/
 │   ├── ClassRecoveryEngine.java      Análisis de estructura de clases
 │   ├── MetadataExtractor.java        Metadatos Kotlin/anotaciones
 │   └── RealCompilationVerifier.java  Verificación de sintaxis con javac
+├── rebuild/
+│   ├── RebuildPipeline.java      Compilación, dex y firma del APK
+│   ├── SourceCompiler.java       javac sobre las fuentes
+│   ├── DexBuilder.java           Clases a dex (dexlib2)
+│   └── ApkPacker.java            Reemplazo de dex y firma v1+v2+v3
+├── mapping/
+│   ├── MappingFile.java          Parser ProGuard/R8
+│   ├── MappingApplier.java       Aplicación al APK (ZIP en memoria)
+│   └── DexMappingRewriter.java   Renombrado del dex recompilado
+├── api/
+│   └── ApiServer.java            Servidor REST local (HttpServer del JDK)
+├── nativecode/
+│   ├── ElfParser.java            Cabecera, secciones y símbolos ELF
+│   ├── NativeAnalyzer.java       Bibliotecas del paquete
+│   ├── GhidraLocator.java        Detección de analyzeHeadless
+│   └── GhidraRunner.java         Ejecución headless con script propio
+├── crypto/
+│   ├── DecryptionPlugin.java     SPI de plugins (ServiceLoader)
+│   ├── PluginRegistry.java       Integrados + classpath
+│   ├── AesEmbeddedKeyPlugin.java AES con clave literal
+│   ├── Rc4EmbeddedKeyPlugin.java RC4 con clave literal
+│   └── XorConstantPlugin.java    XOR con constante
+├── naming/
+│   ├── NameInferer.java          Reglas heurísticas
+│   ├── NameSuggestion.java       Una sugerencia
+│   └── NameReport.java           Informe JSON
 └── verification/
     ├── ConfidenceScorer.java     Puntaje por clase
     ├── ConfidenceMap.java        Mapa de confianza
@@ -206,7 +256,7 @@ Ejemplo de estructura (campos reales):
   "confidence": { "total": 6425, "averageScore": 68.0, "structurallyValid": 6146, "...": "..." },
   "recovery": { "filesProcessed": 6425, "filesModified": 0, "javacSampled": 40, "javacCompiled": 16, "...": "..." },
   "success": true,
-  "toolVersion": "1.0.0"
+  "toolVersion": "2.0.0"
 }
 ```
 
@@ -310,10 +360,19 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 - Fixtures de formatos regenerables con `scripts/make-fixtures.ps1`
 - Corridas de verificación pequeñas, medianas y grandes documentadas en `docs/VERIFICATION.md`
 
+### 2.0.0: Análisis y Extensibilidad (Completado)
+- `rebuild`: recompila las fuentes editadas y genera un APK firmado con los cambios
+- `--mapping`: mappings de ProGuard/R8 para restaurar nombres al descompilar y volver a ofuscar el dex recompilado
+- `serve`: API REST local con endpoints de decompile, inspect, rebuild, natives y names
+- `natives`: análisis ELF real de los `.so` con Ghidra headless opcional
+- Plugins de encriptación por SPI (`aes-clave-embebida`, `rc4-clave-embebida`, `xor-constante-base64`)
+- `nombres`: inferencia heurística de nombres para identificadores ofuscados, solo informe
+- Suite ampliada y matriz de verificación de 2.0.0 en `docs/VERIFICATION.md`
+
 ### Funciones congeladas
 
-No se agregan motores, algoritmos ni características hasta una versión posterior.
-Los criterios de 1.0.0 y cómo comprobarlos están en [docs/VERIFICATION.md](docs/VERIFICATION.md).
+No se agregan motores ni algoritmos hasta una versión posterior.
+Los criterios de 1.0.0 y 2.0.0 y cómo comprobarlos están en [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Troubleshooting
 

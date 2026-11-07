@@ -117,7 +117,7 @@ level = ConfidenceLevel.fromScore(score)
 
 ## Limitaciones
 
-- **Cifrado complejo**: AES/RSA con claves propias no se descifra; el código queda como está
+- **Cifrado complejo**: los plugins de `crypto` descifran AES/RC4/XOR solo cuando la clave está embebida como literal y el resultado es texto imprimible; claves construidas en tiempo de ejecución o RSA no se descifran y el código queda como está (ver [CRYPTO_PLUGINS.md](CRYPTO_PLUGINS.md))
 - **Nombres ofuscados**: sin `mapping.txt` de ProGuard/R8 no se recuperan nombres originales; JADX no recupera nombres reales y su renombrado sintético no se cuenta como recuperado
 - **Sintaxis vs. resolución**: sin `android.jar`, muchos errores de compilación son de resolución y se ignoran por diseño
 - **Muestra**: solo una parte de los archivos se compila con `javac`; el resto se puntúa con heurísticas

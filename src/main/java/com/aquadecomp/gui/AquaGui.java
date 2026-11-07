@@ -17,6 +17,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
@@ -69,15 +70,20 @@ public final class AquaGui {
         frame = new JFrame("Aquadecomp (BETA) — Descompilador de APKs");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setMinimumSize(new Dimension(900, 640));
-        frame.setLocationByPlatform(true);
 
-        frame.add(buildTopPanel(), BorderLayout.NORTH);
+        JPanel topWrap = new JPanel(new BorderLayout());
+        topWrap.add(buildTopPanel(), BorderLayout.NORTH);
+        topWrap.add(new JSeparator(), BorderLayout.SOUTH);
+
+        frame.add(topWrap, BorderLayout.NORTH);
         frame.add(buildCenterPanel(), BorderLayout.CENTER);
         frame.add(buildBottomPanel(), BorderLayout.SOUTH);
 
         frame.pack();
         frame.setSize(1000, 700);
+        frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+        frame.getRootPane().setDefaultButton(runButton);
     }
 
     private JPanel buildTopPanel() {
@@ -90,6 +96,7 @@ public final class AquaGui {
         c.gridx = 0; c.gridy = 0;
         panel.add(new JLabel("APK:"), c);
         apkField = new JTextField(46);
+        apkField.putClientProperty("JTextField.placeholderText", "Ruta del archivo .apk");
         c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.weightx = 1;
         panel.add(apkField, c);
         JButton browseApk = new JButton("Examinar…");
@@ -100,6 +107,8 @@ public final class AquaGui {
         c.gridx = 0; c.gridy = 1;
         panel.add(new JLabel("Salida:"), c);
         outField = new JTextField(46);
+        outField.putClientProperty("JTextField.placeholderText",
+                "Directorio de salida (por defecto: aquadecomp-out/salida)");
         c.gridx = 1; c.fill = GridBagConstraints.HORIZONTAL; c.weightx = 1;
         panel.add(outField, c);
         JButton browseOut = new JButton("Examinar…");
@@ -126,7 +135,7 @@ public final class AquaGui {
 
         logArea = new JTextArea();
         logArea.setEditable(false);
-        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Reporte", new JScrollPane(reportArea));
@@ -150,6 +159,7 @@ public final class AquaGui {
         statusLabel.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
 
         runButton = new JButton("Descompilar");
+        runButton.putClientProperty("JButton.buttonType", "primary");
         runButton.addActionListener(e -> runPipeline());
 
         openFolderButton = new JButton("Abrir carpeta de salida");

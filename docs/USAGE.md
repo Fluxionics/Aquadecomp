@@ -173,10 +173,14 @@ Ver [API.md](API.md) para endpoints y ejemplos.
 
 #### `gui`
 
-Inicia la interfaz gráfica.
+Inicia la interfaz gráfica. El comando y la opción `--gui` (equivalente)
+aparecen en la ayuda de la CLI.
 
 ```bash
 java -jar aquedecomp.jar gui
+
+# Equivalente
+java -jar aquedecomp.jar --gui
 ```
 
 O simplemente sin argumentos:

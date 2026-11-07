@@ -8,6 +8,7 @@ import com.aquadecomp.rebuild.RebuildPipeline;
 import com.aquadecomp.rebuild.RebuildReport;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
@@ -19,35 +20,80 @@ import java.util.concurrent.Callable;
 
 @Command(
         name = "aquedecomp",
-        mixinStandardHelpOptions = true,
         version = "Aquadecomp 2.0.0",
         description = "Descompilador de APKs con análisis de ofuscación y "
                 + "medición de efectividad del código recuperado.",
+        footer = {
+                "",
+                "Sin argumentos se inicia la interfaz gráfica (equivalente: --gui).",
+                "Ejemplo: java -jar aquedecomp.jar decompile app.apk -o ./salida"
+        },
         subcommands = {
                 AquaCli.DecompileCommand.class,
                 AquaCli.InspectCommand.class,
                 AquaCli.RebuildCommand.class,
                 AquaCli.NativesCommand.class,
                 AquaCli.NombresCommand.class,
-                AquaCli.ServeCommand.class
+                AquaCli.ServeCommand.class,
+                AquaCli.GuiCommand.class
         }
 )
-public class AquaCli implements Runnable {
+public class AquaCli implements Callable<Integer> {
+
+    @Mixin
+    HelpOptions ayuda = new HelpOptions();
+
+    @Option(names = "--gui",
+            description = "Inicia la interfaz gráfica (equivale al subcomando gui).")
+    boolean gui;
 
     @Override
-    public void run() {
+    public Integer call() {
+        if (gui) {
+            return launchGui();
+        }
         CommandLine.usage(this, System.out);
+        return 0;
     }
 
     public static int execute(String[] args) {
         return new CommandLine(new AquaCli()).execute(args);
     }
 
+    static int launchGui() {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            System.err.println("Error: no hay entorno gráfico disponible; "
+                    + "usa los subcomandos de la CLI.");
+            return 1;
+        }
+        com.aquadecomp.gui.AquaGui.launch(new String[0]);
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return 1;
+        }
+        return 0;
+    }
+
+    static class HelpOptions {
+
+        @Option(names = {"-h", "--help"}, usageHelp = true,
+                description = "Muestra esta ayuda y sale.")
+        boolean help;
+
+        @Option(names = {"-V", "--version"}, versionHelp = true,
+                description = "Muestra la información de versión y sale.")
+        boolean version;
+    }
+
     @Command(name = "decompile",
-            mixinStandardHelpOptions = true,
             description = "Descompila un APK a código fuente Java + recursos, "
                     + "y genera un reporte de efectividad.")
     static class DecompileCommand implements Callable<Integer> {
+
+        @Mixin
+        HelpOptions ayuda = new HelpOptions();
 
         @Parameters(index = "0", paramLabel = "APK", description = "Ruta del archivo .apk a descompilar")
         Path apk;
@@ -114,10 +160,12 @@ public class AquaCli implements Runnable {
     }
 
     @Command(name = "rebuild",
-            mixinStandardHelpOptions = true,
             description = "Recompila los fuentes de una descompilación (javac + d8) y "
                     + "genera un APK firmado con los cambios de código.")
     static class RebuildCommand implements Callable<Integer> {
+
+        @Mixin
+        HelpOptions ayuda = new HelpOptions();
 
         @Parameters(index = "0", paramLabel = "SALIDA",
                 description = "Directorio de una descompilación (el que contiene sources/)")
@@ -166,10 +214,12 @@ public class AquaCli implements Runnable {
     }
 
     @Command(name = "natives",
-            mixinStandardHelpOptions = true,
             description = "Analiza las bibliotecas .so del paquete: ELF real "
                     + "(símbolos, secciones, dependencias) y Ghidra headless si está instalado.")
     static class NativesCommand implements Callable<Integer> {
+
+        @Mixin
+        HelpOptions ayuda = new HelpOptions();
 
         @Parameters(index = "0", paramLabel = "APK", description = "Ruta del archivo .apk")
         Path apk;
@@ -261,10 +311,12 @@ public class AquaCli implements Runnable {
     }
 
     @Command(name = "serve",
-            mixinStandardHelpOptions = true,
             description = "Levanta la API REST local (JSON) para descompilar, "
                     + "inspeccionar y recompilar por HTTP.")
     static class ServeCommand implements Callable<Integer> {
+
+        @Mixin
+        HelpOptions ayuda = new HelpOptions();
 
         @Option(names = "--host", paramLabel = "HOST",
                 description = "Dirección de escucha (por defecto: 127.0.0.1)")
@@ -295,11 +347,27 @@ public class AquaCli implements Runnable {
         }
     }
 
+    @Command(name = "gui",
+            description = "Inicia la interfaz gráfica (también: opción --gui "
+                    + "o sin argumentos).")
+    static class GuiCommand implements Callable<Integer> {
+
+        @Mixin
+        HelpOptions ayuda = new HelpOptions();
+
+        @Override
+        public Integer call() {
+            return launchGui();
+        }
+    }
+
     @Command(name = "nombres",
-            mixinStandardHelpOptions = true,
             description = "Infiere nombres descriptivos para identificadores ofuscados "
                     + "a partir de las fuentes descompiladas (solo sugerencias, no renombra).")
     static class NombresCommand implements Callable<Integer> {
+
+        @Mixin
+        HelpOptions ayuda = new HelpOptions();
 
         @Parameters(index = "0", paramLabel = "DIR",
                 description = "Directorio con los fuentes .java descompilados")
@@ -360,10 +428,12 @@ public class AquaCli implements Runnable {
     }
 
     @Command(name = "inspect",
-            mixinStandardHelpOptions = true,
             description = "Solo inspecciona el APK: estructura, manifiesto, "
                     + "permisos y detectores de packers/ofuscación (sin descompilar).")
     static class InspectCommand implements Callable<Integer> {
+
+        @Mixin
+        HelpOptions ayuda = new HelpOptions();
 
         @Parameters(index = "0", paramLabel = "APK", description = "Ruta del archivo .apk")
         Path apk;

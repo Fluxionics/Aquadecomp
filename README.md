@@ -146,6 +146,9 @@ java -jar aquedecomp.jar serve --port 8080
 
 ```bash
 java -jar aquedecomp.jar --gui
+
+# Equivalente (aparece en aquedecomp --help)
+java -jar aquedecomp.jar gui
 ```
 
 ## Estructura del Proyecto
@@ -154,7 +157,7 @@ java -jar aquedecomp.jar --gui
 src/main/java/com/aquadecomp/
 ├── Aquadecomp.java               Punto de entrada (CLI o GUI)
 ├── cli/
-│   └── AquaCli.java              Comandos de línea (decompile, inspect, rebuild, natives, nombres, serve)
+│   └── AquaCli.java              Comandos de línea (decompile, inspect, rebuild, natives, nombres, serve, gui)
 ├── gui/
 │   └── AquaGui.java              Interfaz gráfica Swing
 ├── core/

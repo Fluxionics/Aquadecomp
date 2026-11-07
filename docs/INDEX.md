@@ -8,7 +8,6 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
 **Comienza aquí si quieres usar Aquadecomp**
 
 - [Inicio Rápido](../README.md) - Instalación, primer uso, características principales
-- [Guía Rápida (QUICK_START.md)](../QUICK_START.md) - primeros pasos en la terminal
 - [Guía de Uso (USAGE.md)](USAGE.md) - guía completa:
   - Sintaxis de línea de comandos
   - Casos de uso
@@ -49,7 +48,9 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
 ```
 Aquadecomp/
 ├── README.md                  Visión general y características
-├── QUICK_START.md             Primeros pasos
+├── CONTRIBUTING.md            Cómo contribuir
+├── CODE_OF_CONDUCT.md         Código de conducta
+├── SECURITY.md                Política de seguridad
 ├── build.gradle.kts           Configuración Gradle
 ├── libs/jadx/                 JADX 1.5.6 (motor principal)
 ├── scripts/                   Regeneración de fixtures (make-fixtures, make-aab)

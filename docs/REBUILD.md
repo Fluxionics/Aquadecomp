@@ -12,9 +12,9 @@ Etapas:
 
 1. **Validación** - busca `sources/` en el directorio y localiza el APK original (en `aquedecomp-report.json` o con `--original`)
 2. **android.jar** - usa `--android-jar`, luego `~/.aquadecomp/android.jar`
-3. **Compilación** - `javac` sobre todas las fuentes `.java` de `sources/`
+3. **Compilación** - `javac` sobre las fuentes a compilar (las editadas, las indicadas con `--files` o todas en modo completo)
 4. **Conversión a dex** - las clases compiladas se convierten con dexlib2
-5. **Reemplazo** - el dex nuevo sustituye al original dentro de una copia del ZIP
+5. **Reemplazo** - cada clase recompilada se sustituye en su dex original con baksmali/smali; los demás archivos dex se conservan byte a byte, así se respeta la estructura multidex y los límites de identificadores del formato dex
 6. **Firma** - firma v1+v2+v3 con un certificado propio de Aquadecomp
 
 **Opciones**:

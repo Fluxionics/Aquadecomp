@@ -1,9 +1,9 @@
-# Verificación de Aquadecomp 1.0.0 y 2.0.0
+# Verificación de Aquadecomp 1.0.0, 2.0.0 y 2.0.1
 
-Este documento dice cómo comprobar, paso a paso, que las versiones 1.0.0 y
-2.0.0 cumplen sus criterios de terminación. La primera parte cubre la 1.0.0 y
-la última sección, la 2.0.0. Todo lo que sigue es reproducible desde un clon
-limpio con Java 21 y Gradle 9.
+Este documento dice cómo comprobar, paso a paso, que las versiones 1.0.0,
+2.0.0 y 2.0.1 cumplen sus criterios de terminación. La primera parte cubre la
+1.0.0, la segunda la 2.0.0 y la última la 2.0.1. Todo lo que sigue es
+reproducible desde un clon limpio con Java 21 y Gradle 9.
 
 ## Comandos base
 
@@ -247,3 +247,102 @@ inexistente), ejecutados con el JAR de 2.0.0:
   a JADX. Con un directorio limpio la corrida reprodujo el rescate 65/66 y la
   atribución exacta de 1.0.0. Por eso toda la matriz de 2.0.0 se corrió en
   salidas nuevas.
+
+---
+
+## Verificación de 2.0.1
+
+La 2.0.1 no agrega funcionalidades: corrige la documentación, añade CI con
+GitHub Actions y refuerza el `rebuild` con pruebas externas (multidex, Kotlin,
+dependencias externas, recursos, firma) y con un guard que rechaza salidas
+desofuscadas. Se verificó el 2026-11-08 con el JAR de `gradle jar` en la misma
+máquina que las versiones anteriores.
+
+### Comandos base de 2.0.1
+
+```bash
+gradle test          # suite completa
+gradle jar           # genera build/libs/aquedecomp.jar
+```
+
+El push a `main` y las pull requests ejecutan la misma suite en GitHub Actions
+(`.github/workflows/ci.yml`, Windows + Temurin 21) y publican el JAR como
+artefacto `aquedecomp-jar`.
+
+### Pruebas externas de rebuild (criterio nuevo)
+
+Son pruebas que van más allá de la suite con fixtures en memoria: usan APKs
+construidos durante el test que ejercitan casos reales de reconstrucción.
+
+| # | Prueba | Qué comprueba |
+|---|--------|---------------|
+| 1 | `RebuildExternalTest.apkMultidexReemplazaLaClaseEnSuDexYConservaLosDemas` | Un APK con dos dex: la clase recompilada se reemplaza en su dex y el otro dex se conserva byte a byte |
+| 2 | `RebuildExternalTest.apkDeKotlinSeRecompilaConSuStdlibEmpaquetado` | Una clase Kotlin se recompila con kotlinc 2.0.21 y su kotlin-stdlib queda empaquetado en el APK |
+| 3 | `RebuildExternalTest.dependenciaExternaSeResuelveDesdeElDexDelApk` | Una referencia a Gson se resuelve usando el propio dex del APK como classpath, sin dependencias externas |
+| 4 | `RebuildExternalTest.recursosYAssetsSeConservanByteAByte` | Tras el rebuild, todos los recursos y assets son idénticos byte a byte a los del APK original |
+| 5 | `RebuildExternalTest.firmaPropiaNoCoincideConElCertificadoDelDesarrollador` | El APK reconstruido se firma con un certificado propio (v1+v2+v3) que no coincide con el del desarrollador original |
+
+### Guard de reconstrucción (criterio nuevo)
+
+`RebuildPipeline.validateUnits` rechaza reconstrucciones que producirían un
+APK inutilizable:
+
+| # | Prueba | Qué comprueba |
+|---|--------|---------------|
+| 6 | `RebuildPipelineTest.rechazaSalidaDesofuscada` | En modo `editados`/`explicitos`, un FQCN que no existe en el dex original se rechaza con mensaje que sugiere `--no-deobf` |
+| 7 | `RebuildPipelineTest.permiteRenombresForzadosEnOtrasClases` | Los renombres del jobf en clases que no se compilan no bloquean la reconstrucción |
+| 8 | `RebuildPipelineTest.rechazaMiembrosRenombradosDeLaClaseEditada` | Si el jobf renombró miembros (`m`/`f`) de una clase que se va a compilar, se rechaza porque las referencias quedarían rotas |
+| 9 | `RebuildPipelineTest.modoCompletoRechazaSalidaDesofuscada` | En modo `--app` (reconstrucción completa) también se rechaza una salida desofuscada |
+
+### Corrida real con NewPipe
+
+Además de las pruebas automáticas, se reconstruyó un APK de terceros real:
+NewPipe v0.29.1 (`org.schabi.newpipe`, 3 archivos dex, sha256 del APK
+`18447bfb1e06d113edc88df93f471827280de06f6f3d4dc42f56f28b9c1bab79`).
+
+Proceso:
+
+1. Descompilación con `decompile <apk> -o salida --no-deobf` (la modalidad
+   con desofuscación renombraba clases y el guard la rechaza; sin deobf la
+   cadena de motores es JADX 7096 + CFR 1, 468.9 s).
+2. Edición de una sola clase: `NotificationPlayerUi.java`, cuya cadena
+   `...ACTION_RECREATE_NOTIFICATION` es única en el APK. Solo ese archivo
+   quedó con fecha posterior al corte del informe de descompilación.
+3. `rebuild salida -o salida/NewPipe-rebuilt.apk`: **exit 0 en 72.8 s**
+   (`durationMs=71433`), javac 1 fuente a 1 clase, d8, reemplazo en su dex y
+   firma v1+v2+v3.
+
+Resultado verificado:
+
+| Comprobación | Resultado |
+|--------------|-----------|
+| Informe JSON | `success=true`, `mode=editados`, `replacedClasses=1`, `dexOriginal=3`, `signed=true` |
+| `classes.dex` y `classes2.dex` | idénticos byte a byte al APK original (sha256 coincidentes) |
+| `classes3.dex` | reensamblado con la clase editada (sha256 distinto) |
+| Cadena editada | vieja: 0 apariciones; nueva: 1 aparición en `classes3.dex` |
+| Firma (apksig) | `verificado=true`, v1=true, v2=true, v3=true, `CN=Aquadecomp Rebuild` |
+| Entradas ZIP | 1375 en original y 1375 en salida; cambiadas: `classes3.dex` y `META-INF/MANIFEST.MF`; la firma v1 del desarrollador (`SCHABI_K.*`) se sustituye por la propia (`AQUADECO.*`) |
+| Recursos, manifiesto y assets | byte a byte, salvo el `META-INF/MANIFEST.MF` que actualiza la firma |
+| Aviso multidex en el log | "El APK original tenía 3 archivos dex; las clases recompiladas se reemplazaron en su dex y los demás se conservaron sin cambios" |
+
+Notas de proceso y límites de esta corrida:
+
+- `classes.dex` estaba exactamente en 65536 métodos, el tope del formato: una
+  primera edición en una clase de ese dex hizo que d8 desbordara los índices
+  y el rebuild fallara. Por eso la edición se movió a una clase de
+  `classes3.dex` (3453 métodos), que es además la que contiene el código de
+  NewPipe. La detección es correcta: el error de javac/d8 se reporta y no se
+  genera ningún APK.
+- dex2jar casi no emite el atributo `InnerClasses` (5 de 401 clases
+  muestreadas), así que javac solo compila fuentes que no referencian tipos
+  anidados de otras clases (`Outer.Inner`) del classpath. Esto es una
+  limitación del classpath de clases originales, no del reemplazo en dex.
+- d8 emitió un aviso porque `PlayerUi` no está en su classpath de desugaring;
+  `PlayerUi` es clase abstracta en el dex y los métodos de la clase editada
+  son `override` de métodos abstractos, sin efecto en el resultado.
+- **No se probó**: la instalación y el arranque en un dispositivo físico.
+  La verificación de la corrida se hizo con apksig, comparación byte a byte
+  y lectura del informe, no con ejecución real.
+
+Con esto la suite queda en **197 pruebas, 0 fallos, 0 errores, 30 clases de
+prueba**.

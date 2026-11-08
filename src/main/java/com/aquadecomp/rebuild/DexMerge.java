@@ -5,6 +5,7 @@ import org.jf.baksmali.BaksmaliOptions;
 import org.jf.dexlib2.DexFileFactory;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.dexbacked.DexBackedDexFile;
+import org.jf.dexlib2.iface.ClassDef;
 import org.jf.smali.Smali;
 import org.jf.smali.SmaliOptions;
 
@@ -18,7 +19,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -29,17 +33,14 @@ public final class DexMerge {
     private DexMerge() {
     }
 
-    public record MergeResult(Path dex, int classesReplaced) {
+    public record MergeResult(List<ApkPacker.Replacement> replacements, int classesReplaced) {
     }
 
     public static MergeResult merge(Path originalApk, List<Path> newDexFiles,
-                                    Set<String> replacedClasses, Path workDir, Path outDex)
+                                    Set<String> replacedClasses, Path workDir)
             throws Exception {
-        Path tree = workDir.resolve("smali-original");
         Path staging = workDir.resolve("smali-nuevas");
-        deleteRecursively(tree);
         deleteRecursively(staging);
-        Files.createDirectories(tree);
         Files.createDirectories(staging);
 
         List<String> originalDexNames = rootDexEntries(originalApk);
@@ -47,48 +48,90 @@ public final class DexMerge {
             throw new IOException("El APK original no contiene clases dex en la raíz");
         }
 
-        int apiLevel = 15;
+        Map<String, Set<String>> porDex = new LinkedHashMap<>();
         for (String dexName : originalDexNames) {
-            Path extracted = workDir.resolve("original-" + dexName.replace('/', '_'));
-            extract(originalApk, dexName, extracted);
-            Opcodes opcodes = opcodesFor(extracted);
-            apiLevel = Math.max(apiLevel, opcodes.api);
-            disassemble(extracted, tree, opcodes);
+            porDex.put(dexName, new LinkedHashSet<>());
         }
+        Path lectura = workDir.resolve("original-lectura.dex");
+        for (String dexName : originalDexNames) {
+            extract(originalApk, dexName, lectura);
+            DexBackedDexFile dex = DexFileFactory.loadDexFile(lectura.toFile(),
+                    opcodesFor(lectura));
+            for (ClassDef clase : dex.getClasses()) {
+                String tipo = clase.getType();
+                String fqcn = tipo.substring(1, tipo.length() - 1).replace('/', '.');
+                if (replacedClasses.contains(fqcn)) {
+                    porDex.get(dexName).add(fqcn);
+                }
+            }
+        }
+        Files.deleteIfExists(lectura);
+        Set<String> pendientes = new LinkedHashSet<>(replacedClasses);
+        porDex.values().forEach(pendientes::removeAll);
+        porDex.get(originalDexNames.get(0)).addAll(pendientes);
 
         for (Path newDex : newDexFiles) {
-            Opcodes opcodes = opcodesFor(newDex);
-            apiLevel = Math.max(apiLevel, opcodes.api);
-            disassemble(newDex, staging, opcodes);
-        }
-
-        for (String fqcn : replacedClasses) {
-            Files.deleteIfExists(tree.resolve(fqcn.replace('.', '/') + ".smali"));
+            disassemble(newDex, staging, opcodesFor(newDex));
         }
 
         int merged = 0;
-        for (String fqcn : replacedClasses) {
-            Path source = staging.resolve(fqcn.replace('.', '/') + ".smali");
-            if (!Files.isRegularFile(source)) {
+        List<ApkPacker.Replacement> replacements = new ArrayList<>();
+        int indice = 0;
+        for (String dexName : originalDexNames) {
+            Set<String> clases = porDex.get(dexName);
+            if (clases.isEmpty()) {
+                replacements.add(new ApkPacker.Replacement(dexName,
+                        lecturaOriginal(originalApk, dexName)));
                 continue;
             }
-            Path target = tree.resolve(fqcn.replace('.', '/') + ".smali");
-            Files.createDirectories(target.getParent());
-            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-            merged++;
+            indice++;
+            Path extracted = workDir.resolve("original-" + dexName.replace('/', '_'));
+            Path tree = workDir.resolve("smali-" + indice);
+            deleteRecursively(tree);
+            Files.createDirectories(tree);
+            extract(originalApk, dexName, extracted);
+            Opcodes opcodes = opcodesFor(extracted);
+            disassemble(extracted, tree, opcodes);
+
+            for (String fqcn : clases) {
+                Path source = staging.resolve(fqcn.replace('.', '/') + ".smali");
+                if (!Files.isRegularFile(source)) {
+                    continue;
+                }
+                Path target = tree.resolve(fqcn.replace('.', '/') + ".smali");
+                Files.createDirectories(target.getParent());
+                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                merged++;
+            }
+
+            Path outDex = workDir.resolve("reemplazado-" + indice + ".dex");
+            SmaliOptions options = new SmaliOptions();
+            options.apiLevel = opcodes.api;
+            options.outputDexFile = outDex.toString();
+            boolean assembled = Smali.assemble(options, List.of(tree.toString()));
+            if (!assembled || !Files.isRegularFile(outDex)) {
+                throw new IOException("No se pudo ensamblar el dex " + dexName);
+            }
+            replacements.add(new ApkPacker.Replacement(dexName,
+                    Files.readAllBytes(outDex)));
+            deleteRecursively(tree);
         }
         if (merged == 0) {
             throw new IOException("Ninguna clase recompilada se pudo integrar al dex original");
         }
+        return new MergeResult(replacements, merged);
+    }
 
-        SmaliOptions options = new SmaliOptions();
-        options.apiLevel = apiLevel;
-        options.outputDexFile = outDex.toString();
-        boolean assembled = Smali.assemble(options, List.of(tree.toString()));
-        if (!assembled || !Files.isRegularFile(outDex)) {
-            throw new IOException("No se pudo ensamblar el dex fusionado");
+    private static byte[] lecturaOriginal(Path apk, String entryName) throws IOException {
+        try (ZipFile zip = new ZipFile(apk.toFile())) {
+            ZipEntry entry = zip.getEntry(entryName);
+            if (entry == null) {
+                throw new IOException("Falta la entrada " + entryName + " en el APK original");
+            }
+            try (InputStream in = zip.getInputStream(entry)) {
+                return in.readAllBytes();
+            }
         }
-        return new MergeResult(outDex, merged);
     }
 
     public static List<String> rootDexEntries(Path apk) throws IOException {

@@ -9,16 +9,26 @@ import com.aquadecomp.mapping.MappingFile;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import org.jf.dexlib2.DexFileFactory;
+import org.jf.dexlib2.Opcodes;
+import org.jf.dexlib2.iface.ClassDef;
+import org.jf.dexlib2.iface.DexFile;
+
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 public final class RebuildPipeline {
 
@@ -59,7 +69,6 @@ public final class RebuildPipeline {
             listener.onStage("VALIDANDO DESCOMPILACIÓN");
             listener.onProgress(5, "APK original y renombres");
             original = resolveOriginal(opts);
-            rejectRenamedOutput(opts.decompileDir());
 
             MappingFile mapping = loadMapping(opts);
             if (mapping != null) {
@@ -71,6 +80,7 @@ public final class RebuildPipeline {
             List<Path> units = unitsFor(mode, sources, opts);
             sourceCount = units.size();
             listener.onLog("Modo: " + mode + " | archivos a compilar: " + sourceCount);
+            validateUnits(opts.decompileDir(), original, mapping, mode, units);
 
             listener.onStage("PREPARANDO CLASSPATH");
             listener.onProgress(15, "android.jar y clases originales");
@@ -167,16 +177,15 @@ public final class RebuildPipeline {
                 }
                 replacedCount = classNames.size();
             } else {
-                listener.onLog("Fusionando con baksmali/smali: solo se reemplazan las clases "
-                        + "recompiladas");
-                DexMerge.MergeResult merged = DexMerge.merge(original, dexes, classNames,
-                        work, work.resolve("fusionado.dex"));
-                replacements = List.of(new ApkPacker.Replacement("classes.dex",
-                        Files.readAllBytes(merged.dex())));
+                listener.onLog("Reemplazando las clases recompiladas en su dex original: "
+                        + "los demás archivos dex se conservan sin cambios");
+                DexMerge.MergeResult merged = DexMerge.merge(original, dexes, classNames, work);
+                replacements = merged.replacements();
                 replacedCount = merged.classesReplaced();
                 if (dexOriginal.size() > 1) {
                     warnings.add("El APK original tenía " + dexOriginal.size()
-                            + " archivos dex; el resultado fusionado queda en un solo classes.dex");
+                            + " archivos dex; las clases recompiladas se reemplazaron en su "
+                            + "dex y los demás se conservaron sin cambios");
                 }
             }
 
@@ -272,6 +281,116 @@ public final class RebuildPipeline {
                     + "ejecutarse. Descompila de nuevo sin desofuscación: "
                     + "java -jar aquedecomp.jar decompile <apk> -o <salida> --no-deobf");
         }
+    }
+
+    private static void validateUnits(Path decompileDir, Path original, MappingFile mapping,
+                                      String mode, List<Path> units) throws IOException {
+        if (MODE_FULL.equals(mode)) {
+            rejectRenamedOutput(decompileDir);
+            return;
+        }
+
+        Path root = decompileDir.resolve("sources").toAbsolutePath().normalize();
+        Set<String> dex = dexClassNames(original);
+        MappingFile.RenameTable table = mapping != null
+                ? mapping.renameTable(MappingFile.Direction.FORWARD) : null;
+
+        List<String> sinClaseEnDex = new ArrayList<>();
+        Set<String> unidades = new LinkedHashSet<>();
+        for (Path unit : units) {
+            Path rel = root.relativize(unit.toAbsolutePath().normalize());
+            String nombre = rel.toString().replace('\\', '/');
+            if (!nombre.endsWith(".java")) {
+                continue;
+            }
+            nombre = nombre.substring(0, nombre.length() - ".java".length());
+            String fqcn = nombre.replace('/', '.');
+            unidades.add(fqcn);
+            String descriptor = "L" + nombre + ";";
+            String obf = table != null ? table.types().get(descriptor) : null;
+            boolean valido = obf != null ? dex.contains(obf) : dex.contains(descriptor);
+            if (!valido) {
+                sinClaseEnDex.add(fqcn);
+            }
+        }
+        if (!sinClaseEnDex.isEmpty()) {
+            String ejemplo = String.join(", ",
+                    sinClaseEnDex.subList(0, Math.min(3, sinClaseEnDex.size())))
+                    + (sinClaseEnDex.size() > 3 ? ", ..." : "");
+            throw new IOException("La descompilación renombró " + sinClaseEnDex.size()
+                    + " clases que no existen en el APK original (" + ejemplo + "): los "
+                    + "nombres de los archivos no coinciden con las clases del APK y el "
+                    + "resultado no podría ejecutarse. Descompila de nuevo sin desofuscación: "
+                    + "java -jar aquedecomp.jar decompile <apk> -o <salida> --no-deobf");
+        }
+
+        Path jobf = decompileDir.resolve("aquedecomp-renames.jobf");
+        if (!Files.isRegularFile(jobf)) {
+            return;
+        }
+        Set<String> duenos = new LinkedHashSet<>(unidades);
+        if (table != null) {
+            for (String unidad : unidades) {
+                String obf = table.types().get("L" + unidad.replace('.', '/') + ";");
+                if (obf != null) {
+                    duenos.add(obf.substring(1, obf.length() - 1).replace('/', '.'));
+                }
+            }
+        }
+        Set<String> tocadas = new LinkedHashSet<>();
+        for (String line : Files.readAllLines(jobf)) {
+            if (line.length() < 4 || (line.charAt(0) != 'm' && line.charAt(0) != 'f')) {
+                continue;
+            }
+            int idx = line.lastIndexOf(" = ");
+            if (idx < 0 || idx < 3) {
+                continue;
+            }
+            String izquierda = line.substring(2, idx);
+            int punto = izquierda.lastIndexOf('.');
+            if (punto <= 0) {
+                continue;
+            }
+            String dueno = izquierda.substring(0, punto);
+            if (duenos.contains(dueno)) {
+                tocadas.add(dueno);
+            }
+        }
+        if (!tocadas.isEmpty()) {
+            throw new IOException("La descompilación renombró miembros de "
+                    + tocadas.size() + " clases que se van a compilar ("
+                    + String.join(", ", tocadas) + "): recompilarlas dejaría referencias "
+                    + "rotas. Descompila de nuevo sin desofuscación: "
+                    + "java -jar aquedecomp.jar decompile <apk> -o <salida> --no-deobf");
+        }
+    }
+
+    private static Set<String> dexClassNames(Path apk) throws IOException {
+        Set<String> tipos = new HashSet<>();
+        Path temporal = Files.createTempFile("aquedecomp-clases", ".dex");
+        try {
+            try (ZipFile zip = new ZipFile(apk.toFile())) {
+                for (String nombre : ApkPacker.dexNames(apk)) {
+                    ZipEntry entry = zip.getEntry(nombre);
+                    if (entry == null) {
+                        continue;
+                    }
+                    byte[] datos;
+                    try (InputStream in = zip.getInputStream(entry)) {
+                        datos = in.readAllBytes();
+                    }
+                    Files.write(temporal, datos);
+                    DexFile dex = DexFileFactory.loadDexFile(temporal.toFile(),
+                            Opcodes.getDefault());
+                    for (ClassDef clase : dex.getClasses()) {
+                        tipos.add(clase.getType());
+                    }
+                }
+            }
+        } finally {
+            Files.deleteIfExists(temporal);
+        }
+        return tipos;
     }
 
     private static MappingFile loadMapping(Options opts) throws IOException {

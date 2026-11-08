@@ -316,7 +316,7 @@ APK 100 MB → 500 + 100 + 300 = 900 MB necesarios
 
 | Paquete | Responsabilidad |
 |---------|-----------------|
-| `rebuild` | Recompila las fuentes de `sources/` con `javac`, convierte a dex con dexlib2, reemplaza el dex en una copia del ZIP y firma v1+v2+v3 con certificado propio |
+| `rebuild` | Recompila las fuentes de `sources/` con `javac`, convierte a dex con dexlib2, sustituye cada clase recompilada en su dex original con baksmali/smali (conservando la estructura multidex) y firma v1+v2+v3 con certificado propio |
 | `mapping` | Parser propio de mappings ProGuard/R8 (`MappingFile`), aplicación al APK antes de descompilar (`MappingApplier`, ZIP en memoria) y renombrado del dex recompilado (`DexMappingRewriter`) |
 | `api` | Servidor HTTP local con `com.sun.net.httpserver` del JDK, sin dependencias nuevas; expone el pipeline como endpoints JSON |
 | `nativecode` | Parser ELF propio (32/64 bits, LE/BE, secciones, símbolos, dinámica), detección de Ghidra (`GhidraLocator`) y ejecución headless con el script `DecompileFunctions.java` |

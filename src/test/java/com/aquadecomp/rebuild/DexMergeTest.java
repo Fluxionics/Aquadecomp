@@ -58,13 +58,17 @@ class DexMergeTest {
         SourceCompiler.compile(List.of(java), clasesNuevas, List.of());
         Path dexNuevo = RebuildTestSupport.buildDex(clasesNuevas, temp.resolve("work2"));
 
-        Path outDex = temp.resolve("fusionado.dex");
         DexMerge.MergeResult result = DexMerge.merge(apk, List.of(dexNuevo),
-                Set.of("Beta"), temp, outDex);
+                Set.of("Beta"), temp);
 
         assertEquals(1, result.classesReplaced());
-        assertTrue(Files.isRegularFile(outDex));
+        assertEquals(1, result.replacements().size());
+        ApkPacker.Replacement replacement = result.replacements().get(0);
+        assertEquals("classes.dex", replacement.name());
 
+        byte[] bytes = replacement.data();
+        Path outDex = temp.resolve("reemplazado.dex");
+        Files.write(outDex, bytes);
         var dex = DexFileFactory.loadDexFile(outDex.toFile(), Opcodes.getDefault());
         Set<String> names = dex.getClasses().stream()
                 .map(ClassDef::getType)
@@ -72,9 +76,8 @@ class DexMergeTest {
         assertTrue(names.contains("LAlpha;"), "Alpha desapareció: " + names);
         assertTrue(names.contains("LBeta;"), "Beta desapareció: " + names);
 
-        byte[] bytes = Files.readAllBytes(outDex);
         assertTrue(RebuildTestSupport.containsBytes(bytes, "beta-modificada"),
-                "el cambio no llegó al dex fusionado");
+                "el cambio no llegó al dex reemplazado");
         assertFalse(RebuildTestSupport.containsBytes(bytes, "beta-original"),
                 "la versión vieja de Beta sigue en el dex");
         assertTrue(RebuildTestSupport.containsBytes(bytes, "alpha-original"),
@@ -90,8 +93,7 @@ class DexMergeTest {
 
         Exception error = null;
         try {
-            DexMerge.merge(apk, List.of(dexNuevo), Set.of("NoExiste"), temp,
-                    temp.resolve("out.dex"));
+            DexMerge.merge(apk, List.of(dexNuevo), Set.of("NoExiste"), temp);
         } catch (Exception e) {
             error = e;
         }

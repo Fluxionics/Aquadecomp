@@ -214,7 +214,7 @@ class RebuildExternalTest {
     }
 
     @Test
-    void apkMultidexSeFusionaEnUnSoloDexSinDuplicarClases() throws Exception {
+    void apkMultidexReemplazaLaClaseEnSuDexYConservaLosDemas() throws Exception {
         Path hello = compilarJava(temp.resolve("hello"), "Hello.java", """
                 package com.example;
                 public class Hello {
@@ -250,18 +250,27 @@ class RebuildExternalTest {
         assertTrue(report.success(), report.consoleSummary());
         assertEquals("editados", report.mode());
         assertEquals(2, report.dexOriginal().size());
-        assertEquals(List.of("classes.dex"), ApkPacker.dexNames(salida));
-        assertTrue(report.warnings().stream().anyMatch(w -> w.contains("un solo classes.dex")),
+        assertEquals(List.of("classes.dex", "classes2.dex"), ApkPacker.dexNames(salida));
+        assertTrue(report.warnings().stream().anyMatch(w -> w.contains("archivos dex")),
                 "sin aviso de multidex: " + report.warnings());
 
         byte[] dexSalida = entradaDe(salida, "classes.dex");
+        byte[] dex2Salida = entradaDe(salida, "classes2.dex");
+        assertArrayEquals(entradas.get("classes2.dex"), dex2Salida,
+                "el segundo dex debía conservarse byte a byte");
+
         Set<String> tipos = tiposDe(dexSalida, "multidex-verificacion.dex");
         assertTrue(tipos.contains("Lcom/example/Hello;"), "tipos: " + tipos);
-        assertTrue(tipos.contains("Lcom/example/Mundo;"), "tipos: " + tipos);
+        assertFalse(tipos.contains("Lcom/example/Mundo;"),
+                "la clase del segundo dex se duplicó: " + tipos);
         String cuerpo = texto(dexSalida);
         assertTrue(cuerpo.contains("valor-editado"), "el cambio no llegó al APK");
         assertFalse(cuerpo.contains("valor-original"), "la versión vieja sigue presente");
-        assertTrue(cuerpo.contains("mundo-original"), "la clase del segundo dex se perdió");
+
+        Set<String> tipos2 = tiposDe(dex2Salida, "multidex-verificacion2.dex");
+        assertTrue(tipos2.contains("Lcom/example/Mundo;"), "tipos2: " + tipos2);
+        assertFalse(tipos2.contains("Lcom/example/Hello;"),
+                "Hello se duplicó en el segundo dex: " + tipos2);
 
         assertFirmaCompleta(verificar(salida));
     }

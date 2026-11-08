@@ -127,6 +127,75 @@ class RebuildPipelineTest {
     @Test
     void rechazaSalidaDesofuscada() throws Exception {
         prepararDescompilacion();
+        Files.writeString(decompileDir.resolve("sources").resolve("com").resolve("example")
+                        .resolve("Alpha.java"), """
+                package com.example;
+                public class Alpha {
+                    public String valor() {
+                        return "renombrado";
+                    }
+                }
+                """, StandardCharsets.UTF_8);
+        Files.writeString(decompileDir.resolve("aquedecomp-renames.jobf"),
+                "c com.example.a = com.example.Alpha\n", StandardCharsets.UTF_8);
+        Path outApk = temp.resolve("nunca.apk");
+
+        RebuildReport report = new RebuildPipeline().run(options(outApk),
+                PipelineListener.SILENT);
+
+        assertFalse(report.success());
+        assertNotNull(report.errorMessage());
+        assertTrue(report.errorMessage().contains("--no-deobf"),
+                "mensaje sin la indicación: " + report.errorMessage());
+        assertTrue(report.errorMessage().contains("com.example.Alpha"),
+                "mensaje sin la clase: " + report.errorMessage());
+        assertFalse(Files.exists(outApk));
+    }
+
+    @Test
+    void permiteRenombresForzadosEnOtrasClases() throws Exception {
+        prepararDescompilacion();
+        Files.writeString(decompileDir.resolve("aquedecomp-renames.jobf"), """
+                c androidx.compose.ui.Modifier$-CC = CC
+                m com.example.Otro.clone()Ljava/lang/Object; = m6clone
+                f com.example.Otro.valor:I = m7valor
+                """, StandardCharsets.UTF_8);
+        Path outApk = temp.resolve("reconstruido.apk");
+
+        RebuildReport report = new RebuildPipeline().run(options(outApk),
+                PipelineListener.SILENT);
+
+        assertTrue(report.success(), report.consoleSummary());
+        assertEquals("editados", report.mode());
+        assertTrue(Files.isRegularFile(outApk));
+    }
+
+    @Test
+    void rechazaMiembrosRenombradosDeLaClaseEditada() throws Exception {
+        prepararDescompilacion();
+        Files.writeString(decompileDir.resolve("aquedecomp-renames.jobf"),
+                "m com.example.Hello.valor()Ljava/lang/String; = m0valor\n",
+                StandardCharsets.UTF_8);
+        Path outApk = temp.resolve("nunca.apk");
+
+        RebuildReport report = new RebuildPipeline().run(options(outApk),
+                PipelineListener.SILENT);
+
+        assertFalse(report.success());
+        assertNotNull(report.errorMessage());
+        assertTrue(report.errorMessage().contains("--no-deobf"),
+                "mensaje sin la indicación: " + report.errorMessage());
+        assertTrue(report.errorMessage().contains("com.example.Hello"),
+                "mensaje sin la clase: " + report.errorMessage());
+        assertFalse(Files.exists(outApk));
+    }
+
+    @Test
+    void modoCompletoRechazaSalidaDesofuscada() throws Exception {
+        prepararDescompilacion();
+        Files.setLastModifiedTime(decompileDir.resolve("sources").resolve("com")
+                        .resolve("example").resolve("Hello.java"),
+                FileTime.fromMillis(System.currentTimeMillis() - 7_200_000L));
         Files.writeString(decompileDir.resolve("aquedecomp-renames.jobf"),
                 "c com.example.Alpha = com.example.a\n", StandardCharsets.UTF_8);
         Path outApk = temp.resolve("nunca.apk");
@@ -135,6 +204,7 @@ class RebuildPipelineTest {
                 PipelineListener.SILENT);
 
         assertFalse(report.success());
+        assertEquals("app-completa", report.mode());
         assertNotNull(report.errorMessage());
         assertTrue(report.errorMessage().contains("--no-deobf"),
                 "mensaje sin la indicación: " + report.errorMessage());

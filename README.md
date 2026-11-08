@@ -1,5 +1,7 @@
 # Aquadecomp - Multi-Herramienta Orquestador de Descompilación
 
+[![CI](https://github.com/Fluxionics/Aquadecomp/actions/workflows/ci.yml/badge.svg)](https://github.com/Fluxionics/Aquadecomp/actions/workflows/ci.yml)
+
 Aquadecomp es una plataforma de descompilación de aplicaciones Android que integra múltiples descompiladores en una cadena de respaldo, maximizando la cobertura del código decompilado, incluso en apps ofuscadas.
 
 ## Características Principales

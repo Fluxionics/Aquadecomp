@@ -274,7 +274,7 @@ Ejemplo de estructura (campos reales):
   "confidence": { "total": 6425, "averageScore": 68.0, "structurallyValid": 6146, "...": "..." },
   "recovery": { "filesProcessed": 6425, "filesModified": 0, "javacSampled": 40, "javacCompiled": 16, "...": "..." },
   "success": true,
-  "toolVersion": "2.0.0"
+  "toolVersion": "2.0.1"
 }
 ```
 

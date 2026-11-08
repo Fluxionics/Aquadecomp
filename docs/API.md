@@ -37,7 +37,7 @@ Todas las respuestas son JSON con `Content-Type: application/json; charset=utf-8
 
 ```bash
 curl http://127.0.0.1:8080/health
-# {"status":"ok","version":"2.0.0"}
+# {"status":"ok","version":"2.0.1"}
 ```
 
 ### Inspección

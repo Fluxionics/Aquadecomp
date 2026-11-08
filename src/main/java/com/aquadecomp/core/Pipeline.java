@@ -15,7 +15,7 @@ import java.util.stream.Stream;
 
 public final class Pipeline {
 
-    public static final String VERSION = "2.0.0";
+    public static final String VERSION = "2.0.1";
 
     public record Options(Path apk, Path outputDir, boolean deobfuscate,
                           boolean includeResources, int threads, Path mapping) {

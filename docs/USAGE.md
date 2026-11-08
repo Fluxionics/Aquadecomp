@@ -400,7 +400,7 @@ Estructura (serialización Gson de `PipelineResult`), con valores ilustrativos:
   "outputDir": "./output",
   "success": true,
   "errorMessage": null,
-  "toolVersion": "2.0.0"
+  "toolVersion": "2.0.1"
 }
 ```
 
@@ -414,7 +414,7 @@ Ejemplo de estructura (valores ilustrativos; lo real depende del APK):
 - **Fecha:** 2026-11-04T13:05:00Z
 - **APK:** C:/apk-work/app.apk
 - **Tamaño:** 50.91 MB
-- **Versión Aquadecomp:** 2.0.0
+- **Versión Aquadecomp:** 2.0.1
 - **Entrada:** APK
 
 ## Efectividad global: 78.5/100

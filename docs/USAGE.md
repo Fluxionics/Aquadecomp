@@ -5,13 +5,21 @@
 ### Instalación Mínima
 
 ```bash
-# Descargar JAR desde los releases del repositorio
+# Descargar JAR y checksum desde los releases del repositorio
 curl -LO https://github.com/Fluxionics/Aquadecomp/releases/latest/download/aquedecomp.jar
+curl -LO https://github.com/Fluxionics/Aquadecomp/releases/latest/download/aquedecomp.jar.sha256
+
+# Verificar la integridad del archivo descargado
+sha256sum -c aquedecomp.jar.sha256      # Linux / macOS
+certutil -hashfile aquedecomp.jar SHA256  # Windows
 
 # O compilar desde fuente
 gradle jar
 java -jar build/libs/aquedecomp.jar
 ```
+
+Si el hash no coincide, el archivo está incompleto o alterado: descárgalo de
+nuevo desde la página de la release.
 
 ### Primer Descompilación
 

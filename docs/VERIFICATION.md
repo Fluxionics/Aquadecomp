@@ -337,12 +337,64 @@ Notas de proceso y límites de esta corrida:
   muestreadas), así que javac solo compila fuentes que no referencian tipos
   anidados de otras clases (`Outer.Inner`) del classpath. Esto es una
   limitación del classpath de clases originales, no del reemplazo en dex.
+  Cerrada en 2.0.2 (ver más abajo).
 - d8 emitió un aviso porque `PlayerUi` no está en su classpath de desugaring;
   `PlayerUi` es clase abstracta en el dex y los métodos de la clase editada
   son `override` de métodos abstractos, sin efecto en el resultado.
 - **No se probó**: la instalación y el arranque en un dispositivo físico.
   La verificación de la corrida se hizo con apksig, comparación byte a byte
-  y lectura del informe, no con ejecución real.
+  y lectura del informe, no con ejecución real. Cerrado en 2.0.2 (ver más
+  abajo).
 
 Con esto la suite queda en **197 pruebas, 0 fallos, 0 errores, 30 clases de
 prueba**.
+
+## Verificación de 2.0.2 (correcciones tras 2.0.1)
+
+Las limitaciones que quedaron abiertas en 2.0.1 se cerraron en modo
+congelamiento: solo correcciones y documentación, sin funcionalidades nuevas.
+
+### Guard del límite de referencias de método
+
+- `DexMerge` calcula antes de ensamblar el delta de métodos de la clase
+  editada contra las referencias de método del dex de destino y falla si la
+  suma supera 65536, el tope del formato dex.
+- E2E con NewPipe real: editar `ExtractionException` (clase de `classes.dex`,
+  exactamente en 65536) terminó con exit=1 y el mensaje "El dex classes.dex
+  usa 65536 de 65536 referencias de método... lo llevaría a 65537... Edita
+  una clase que viva en otro archivo dex".
+- El chequeo corre antes de baksmali, así que el fallo sale en segundos en
+  lugar de después del desensamblado completo.
+- Pruebas: `rechazaDexAltoDeReferenciasDeMetodo` y
+  `permiteReemplazoDentroDelLimiteDeMetodo` (`DexMergeTest`).
+
+### Atributo InnerClasses en el classpath
+
+- dex2jar no emite `InnerClasses` en todas las clases: en el JAR real de
+  NewPipe, 1234 de 5486 clases con `$` lo traían. Sin ese atributo javac no
+  resuelve referencias a tipos anidados (`Outer.Inner`).
+- `InnerClassAttributes.add` rellena el atributo que falte en el JAR de
+  clases originales después de `Dex2JarConverter.convert`, con un parser
+  propio de class files y sin dependencias nuevas. Los archivos que ya lo
+  traen no se modifican.
+- Sobre el JAR real de NewPipe: 3071 clases inyectadas, 0 de las 1234 que ya
+  traían el atributo modificadas, segunda pasada idempotente, y `javap`
+  resuelve `Image.ResolutionLevel` en `Image` después de la inyección.
+- E2E del pipeline: `rebuild` de NewPipe con un archivo editado terminó con
+  exit=0 en 75,6 s, APK firmado v1+v2+v3 de 19846413 bytes.
+- Pruebas: `InnerClassAttributesTest` (3), con JAR fabricado a mano para
+  controlar el estado inicial: sin atributo → se inyecta y javac resuelve el
+  tipo anidado; generado por javac → los bytes de las dos clases no cambian;
+  clases sin anidados → intactas.
+
+### Distribución verificable
+
+- Cada release publica `aquedecomp.jar.sha256` junto al JAR; el README y
+  `docs/USAGE.md` documentan la verificación con `sha256sum -c` (Linux/macOS)
+  o `certutil -hashfile ... SHA256` (Windows).
+- `scripts/test-device.ps1` instala, lanza y verifica el APK reconstruido en
+  un dispositivo conectado por USB o por `adb connect`, con captura de
+  pantalla en `capturas/` y salida con código distinto de cero si la app no
+  arranca limpia.
+
+Suite: **202 pruebas, 0 fallos, 0 errores, 31 clases de prueba**.

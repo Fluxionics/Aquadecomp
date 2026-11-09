@@ -12,9 +12,9 @@ Etapas:
 
 1. **Validación** - busca `sources/` en el directorio y localiza el APK original (en `aquedecomp-report.json` o con `--original`)
 2. **android.jar** - usa `--android-jar`, luego `~/.aquadecomp/android.jar`
-3. **Compilación** - `javac` sobre las fuentes a compilar (las editadas, las indicadas con `--files` o todas en modo completo)
+3. **Compilación** - `javac` sobre las fuentes a compilar (las editadas, las indicadas con `--files` o todas en modo completo); el classpath de clases originales se genera con dex2jar y se le añade el atributo `InnerClasses` que dex2jar omite, para que javac resuelva referencias a tipos anidados (`Outer.Inner`)
 4. **Conversión a dex** - las clases compiladas se convierten con dexlib2
-5. **Reemplazo** - cada clase recompilada se sustituye en su dex original con baksmali/smali; los demás archivos dex se conservan byte a byte, así se respeta la estructura multidex y los límites de identificadores del formato dex
+5. **Reemplazo** - cada clase recompilada se sustituye en su dex original con baksmali/smali; los demás archivos dex se conservan byte a byte, así se respeta la estructura multidex y los límites de identificadores del formato dex. Antes de ensamblar se comprueba que la edición no llevaría el dex de destino más allá de 65536 referencias de método (el tope del formato); si así fuera, el rebuild falla en segundos con un mensaje que sugiere editar una clase que viva en otro archivo dex
 6. **Firma** - firma v1+v2+v3 con un certificado propio de Aquadecomp
 
 **Opciones**:
@@ -85,6 +85,18 @@ apksigner verify --print-certs app-reconstruido.apk
 
 Debe aparecer `CN=Aquadecomp Rebuild, O=Aquadecomp`. Si aparece otro
 nombre, el APK no salió de `rebuild` de Aquadecomp.
+
+Para instalarlo y arrancarlo en un dispositivo conectado (USB con depuración
+o inalámbrico con `adb connect ip:puerto`):
+
+```powershell
+.\scripts\test-device.ps1 -Apk app-reconstruido.apk -Paquete com.ejemplo.app -Desinstalar
+```
+
+El script instala el APK (desinstala antes si la firma no coincide, con
+`-Desinstalar`), lanza la activity principal, comprueba que el proceso sigue
+vivo y sin `FATAL EXCEPTION` en logcat, guarda una captura en `capturas/` y
+termina con código distinto de cero si algo falla.
 
 ## mapping.txt
 

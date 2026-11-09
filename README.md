@@ -96,6 +96,33 @@ Los cuatro formatos se validan en la etapa de normalización; un archivo que no 
 - Java 21+
 - 4GB RAM mínimo (6GB+ recomendado para APKs grandes)
 
+### Descarga desde releases
+
+Cada release publica el ejecutable `aquedecomp.jar` junto con su checksum
+`aquedecomp.jar.sha256`:
+
+```bash
+curl -LO https://github.com/Fluxionics/Aquadecomp/releases/latest/download/aquedecomp.jar
+curl -LO https://github.com/Fluxionics/Aquadecomp/releases/latest/download/aquedecomp.jar.sha256
+```
+
+Verificar la integridad antes de usarlo:
+
+```bash
+# Linux / macOS
+sha256sum -c aquedecomp.jar.sha256
+
+# Windows (PowerShell)
+certutil -hashfile aquedecomp.jar SHA256
+```
+
+El hash publicado en el archivo `.sha256` y en la página de la release debe
+coincidir con el resultado de `certutil`. Después:
+
+```bash
+java -jar aquedecomp.jar --version
+```
+
 ### Compilar desde fuente
 
 ```bash

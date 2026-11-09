@@ -3,6 +3,7 @@ package com.aquadecomp.rebuild;
 import com.aquadecomp.core.ObfuscationDetector;
 import com.aquadecomp.core.PipelineListener;
 import com.aquadecomp.decompilation.Dex2JarConverter;
+import com.aquadecomp.decompilation.InnerClassAttributes;
 import com.aquadecomp.mapping.DexMappingRewriter;
 import com.aquadecomp.mapping.MappingApplier;
 import com.aquadecomp.mapping.MappingFile;
@@ -103,6 +104,7 @@ public final class RebuildPipeline {
             }
             try {
                 originalJar = Dex2JarConverter.convert(classpathApk, work.resolve("origen"));
+                InnerClassAttributes.add(originalJar);
             } catch (IOException e) {
                 if (!MODE_FULL.equals(mode)) {
                     throw new IOException("No se pudieron extraer las clases originales del APK "

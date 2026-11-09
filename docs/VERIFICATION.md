@@ -1,8 +1,9 @@
-# Verificación de Aquadecomp 1.0.0, 2.0.0 y 2.0.1
+# Verificación de Aquadecomp 1.0.0, 2.0.0, 2.0.1 y 2.0.2
 
 Este documento dice cómo comprobar, paso a paso, que las versiones 1.0.0,
-2.0.0 y 2.0.1 cumplen sus criterios de terminación. La primera parte cubre la
-1.0.0, la segunda la 2.0.0 y la última la 2.0.1. Todo lo que sigue es
+2.0.0, 2.0.1 y 2.0.2 cumplen sus criterios de terminación. La primera parte
+cubre la 1.0.0, la segunda la 2.0.0, la tercera la 2.0.1 y la última la
+2.0.2. Todo lo que sigue es
 reproducible desde un clon limpio con Java 21 y Gradle 9.
 
 ## Comandos base
@@ -396,5 +397,20 @@ congelamiento: solo correcciones y documentación, sin funcionalidades nuevas.
   un dispositivo conectado por USB o por `adb connect`, con captura de
   pantalla en `capturas/` y salida con código distinto de cero si la app no
   arranca limpia.
+
+### Prueba en dispositivo físico
+
+- Dispositivo: Poco F6 (HyperOS) con depuración inalámbrica; `adb pair` y
+  `adb connect 192.168.1.156:43693` desde el PC.
+- `scripts/test-device.ps1 -Apk NewPipe-inner.apk -Paquete org.schabi.newpipe
+  -Dispositivo 192.168.1.156:43693` instaló el APK reconstruido de la corrida
+  anterior, lanzó `org.schabi.newpipe/.MainActivity` y terminó con código 0:
+  proceso vivo (PID 31457) y ninguna `FATAL EXCEPTION` en las últimas 500
+  líneas de logcat.
+- La captura `capturas/dispositivo-poco-f6-20261109.png` muestra la app
+  cargando la pestaña "En directo" con contenido real servido por la red.
+- Las dos primeras instalaciones se cancelaron en el popup de confirmación
+  del móvil (`INSTALL_FAILED_USER_RESTRICTED`): el script reporta el caso y
+  sale con código 1, como corresponde.
 
 Suite: **202 pruebas, 0 fallos, 0 errores, 31 clases de prueba**.

@@ -41,7 +41,7 @@ Aquadecomp es una plataforma multi-herramienta de descompilación de aplicacione
   - Verificación de sintaxis
   - Detección de código sintético
   - Niveles (Excelente/Bueno/Aceptable/Pobre/No confiable)
-- [Verificación (VERIFICATION.md)](VERIFICATION.md) - criterios de 1.0.0, 2.0.0 y 2.0.1, comandos reproducibles y matriz de resultados
+- [Verificación (VERIFICATION.md)](VERIFICATION.md) - criterios de 1.0.0, 2.0.0, 2.0.1 y 2.0.2, comandos reproducibles y matriz de resultados
 
 ## Estructura del Proyecto
 
@@ -121,4 +121,4 @@ APK/AAB/XAPK/APKS
 
 Las funciones nuevas están congeladas: no hay motores, algoritmos ni
 características agregados hasta una versión posterior. El estado de los
-criterios de 1.0.0, 2.0.0 y 2.0.1 está en [VERIFICATION.md](VERIFICATION.md).
+criterios de 1.0.0, 2.0.0, 2.0.1 y 2.0.2 está en [VERIFICATION.md](VERIFICATION.md).

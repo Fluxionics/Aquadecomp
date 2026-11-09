@@ -204,7 +204,7 @@ Options {
   "engineByFile": { "com/example/Foo.java": "JADX", "com/example/Bar.java": "CFR" },
   "outputDir": "...",
   "success": true,
-  "toolVersion": "2.0.1"
+  "toolVersion": "2.0.2"
 }
 ```
 

@@ -301,7 +301,7 @@ Ejemplo de estructura (campos reales):
   "confidence": { "total": 6425, "averageScore": 68.0, "structurallyValid": 6146, "...": "..." },
   "recovery": { "filesProcessed": 6425, "filesModified": 0, "javacSampled": 40, "javacCompiled": 16, "...": "..." },
   "success": true,
-  "toolVersion": "2.0.1"
+  "toolVersion": "2.0.2"
 }
 ```
 
@@ -411,7 +411,7 @@ java -Xmx8g -jar aquedecomp.jar decompile huge.apk -o ./output --threads 8
 A partir de 2.0.1 las funcionalidades quedan congeladas: no se agregan
 motores, algoritmos ni comandos nuevos hasta completar la verificación de
 esta versión; solo se aceptan correcciones de errores. Los criterios de
-1.0.0, 2.0.0 y 2.0.1 y cómo comprobarlos están en
+1.0.0, 2.0.0, 2.0.1 y 2.0.2 y cómo comprobarlos están en
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Troubleshooting

@@ -30,7 +30,22 @@ import java.util.zip.ZipFile;
 
 public final class DexMerge {
 
+    static final int LIMITE_REFERENCIAS_METODO = 65536;
+
     private DexMerge() {
+    }
+
+    static void verificarLimiteMetodos(String dexName, int referencias, int delta)
+            throws IOException {
+        long proyectado = (long) referencias + delta;
+        if (proyectado <= LIMITE_REFERENCIAS_METODO) {
+            return;
+        }
+        throw new IOException("El dex " + dexName + " usa " + referencias + " de "
+                + LIMITE_REFERENCIAS_METODO + " referencias de método, el límite del formato dex, "
+                + "y el código recompilado lo llevaría a " + proyectado + ": ese archivo dex no "
+                + "admite más métodos. Edita una clase que viva en otro archivo dex o comprueba "
+                + "que la edición no añada métodos a la clase.");
     }
 
     public record MergeResult(List<ApkPacker.Replacement> replacements, int classesReplaced) {
@@ -73,6 +88,13 @@ public final class DexMerge {
         for (Path newDex : newDexFiles) {
             disassemble(newDex, staging, opcodesFor(newDex));
         }
+        Map<String, Integer> metodosNuevos = new LinkedHashMap<>();
+        for (Path newDex : newDexFiles) {
+            for (ClassDef clase : DexFileFactory.loadDexFile(newDex.toFile(),
+                    opcodesFor(newDex)).getClasses()) {
+                metodosNuevos.put(clase.getType(), contar(clase.getMethods()));
+            }
+        }
 
         int merged = 0;
         List<ApkPacker.Replacement> replacements = new ArrayList<>();
@@ -91,6 +113,24 @@ public final class DexMerge {
             Files.createDirectories(tree);
             extract(originalApk, dexName, extracted);
             Opcodes opcodes = opcodesFor(extracted);
+
+            DexBackedDexFile dexOriginal = DexFileFactory.loadDexFile(extracted.toFile(), opcodes);
+            int referencias = dexOriginal.getMethodSection().size();
+            Map<String, Integer> metodosViejos = new LinkedHashMap<>();
+            for (ClassDef clase : dexOriginal.getClasses()) {
+                metodosViejos.put(clase.getType(), contar(clase.getMethods()));
+            }
+            int delta = 0;
+            for (String fqcn : clases) {
+                if (!Files.isRegularFile(staging.resolve(fqcn.replace('.', '/') + ".smali"))) {
+                    continue;
+                }
+                String tipo = "L" + fqcn.replace('.', '/') + ";";
+                delta += metodosNuevos.getOrDefault(tipo, 0)
+                        - metodosViejos.getOrDefault(tipo, 0);
+            }
+            verificarLimiteMetodos(dexName, referencias, delta);
+
             disassemble(extracted, tree, opcodes);
 
             for (String fqcn : clases) {
@@ -110,7 +150,10 @@ public final class DexMerge {
             options.outputDexFile = outDex.toString();
             boolean assembled = Smali.assemble(options, List.of(tree.toString()));
             if (!assembled || !Files.isRegularFile(outDex)) {
-                throw new IOException("No se pudo ensamblar el dex " + dexName);
+                throw new IOException("No se pudo ensamblar el dex " + dexName
+                        + " tras el reemplazo; ese archivo usa " + referencias + " de "
+                        + LIMITE_REFERENCIAS_METODO + " referencias de método y cualquier "
+                        + "crecimiento de índices lo desborda");
             }
             replacements.add(new ApkPacker.Replacement(dexName,
                     Files.readAllBytes(outDex)));
@@ -120,6 +163,14 @@ public final class DexMerge {
             throw new IOException("Ninguna clase recompilada se pudo integrar al dex original");
         }
         return new MergeResult(replacements, merged);
+    }
+
+    private static int contar(Iterable<?> elementos) {
+        int total = 0;
+        for (Object ignored : elementos) {
+            total++;
+        }
+        return total;
     }
 
     private static byte[] lecturaOriginal(Path apk, String entryName) throws IOException {

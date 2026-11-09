@@ -417,4 +417,4 @@ Las contribuciones son bienvenidas. Por favor:
 
 Para reportar issues o sugerencias:
 - GitHub Issues
-- Contacto: support@aquadecomp.io
+- Contacto: guille.g.r.s.m@gmail.com

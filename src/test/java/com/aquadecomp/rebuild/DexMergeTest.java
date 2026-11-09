@@ -6,6 +6,7 @@ import org.jf.dexlib2.iface.ClassDef;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DexMergeTest {
@@ -114,6 +116,28 @@ class DexMergeTest {
         List<String> names = DexMerge.rootDexEntries(apk);
 
         assertEquals(List.of("classes.dex", "classes2.dex"), names);
+    }
+
+    @Test
+    void rechazaDexAltoDeReferenciasDeMetodo() {
+        IOException error = assertThrows(IOException.class,
+                () -> DexMerge.verificarLimiteMetodos("classes.dex",
+                        DexMerge.LIMITE_REFERENCIAS_METODO, 1));
+
+        assertTrue(error.getMessage().contains("65536 de 65536"),
+                "mensaje sin el tope: " + error.getMessage());
+        assertTrue(error.getMessage().contains("otro archivo dex"),
+                "mensaje sin la salida sugerida: " + error.getMessage());
+    }
+
+    @Test
+    void permiteReemplazoDentroDelLimiteDeMetodo() throws Exception {
+        DexMerge.verificarLimiteMetodos("classes.dex",
+                DexMerge.LIMITE_REFERENCIAS_METODO, 0);
+        DexMerge.verificarLimiteMetodos("classes.dex",
+                DexMerge.LIMITE_REFERENCIAS_METODO, -7);
+        DexMerge.verificarLimiteMetodos("classes2.dex", 65000, 536);
+        DexMerge.verificarLimiteMetodos("classes3.dex", 3453, 400);
     }
 
     @Test

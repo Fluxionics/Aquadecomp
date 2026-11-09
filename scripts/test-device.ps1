@@ -22,7 +22,13 @@ function Find-Adb {
 }
 
 function Invoke-Adb([string[]]$Argumentos) {
-    $salida = & $adb @Argumentos 2>&1
+    $previo = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $salida = (& $adb @Argumentos 2>&1 | ForEach-Object { $_.ToString() })
+    } finally {
+        $ErrorActionPreference = $previo
+    }
     return ($salida | Out-String).Trim()
 }
 
